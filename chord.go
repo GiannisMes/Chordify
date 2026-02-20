@@ -46,12 +46,15 @@ func (n *Node) FindSuccessor(id *big.Int) (*NodeInfo, error) {
 
 // ClosestPrecedingNode: Ψάχνει στο Finger Table τον πιο κοντινό κόμβο πριν το id
 func (n *Node) ClosestPrecedingNode(id *big.Int) *NodeInfo {
+	n.mu.RLock()
+	defer n.mu.RUnlock() // για να μην βαζω 160 RLock, ενα για καθε θεση του finger table
+
 	for i := 159; i >= 0; i-- {
-		if n.FingerTable[i] != nil {
-			fingerID := n.FingerTable[i].ID
-			// δεν παιρνουμε το ισο
+		finger := n.FingerTable[i]
+		if finger != nil {
+			fingerID := finger.ID
 			if checkRange(fingerID, n.ID, id) && fingerID.Cmp(id) != 0 {
-				return n.FingerTable[i]
+				return finger
 			}
 		}
 	}
