@@ -9,6 +9,8 @@ func main() {
 	port := flag.String("port", "8000", "Η πόρτα του κόμβου")
 	// Το -bootstrap ορίζει την IP:Port του σταθερού κόμβου για την είσοδο στο δίκτυο
 	bootstrapAddr := flag.String("bootstrap", "", "Η διεύθυνση του bootstrap κόμβου")
+	k := flag.Int("k", 1, "Replication factor") ///default replication factor 1
+	consistency := flag.String("consistency", "eventual", "Μοντέλο συνέπειας (eventual / linear)")
 
 	flag.Parse()
 
@@ -17,7 +19,7 @@ func main() {
 
 	//δημιουργια κομβου με κληση της συναρτησης απο  node.go
 	// Η NewNode καλεί αυτόματα τη hashString από το hash.go
-	me := NewNode(myAddress)
+	me := NewNode(myAddress, *k, *consistency)
 
 	fmt.Printf("--- Chordify Node Started ---\n")
 	fmt.Printf("Address: %s\n", me.Address)

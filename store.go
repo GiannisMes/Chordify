@@ -75,6 +75,14 @@ func (n *Node) Insert(key, value string) (string, error) {
 }
 
 func (n *Node) Query(key string) (string, string, error) {
+
+	if n.Consistency == "eventual" { // αν εχω eventual consistency μπορω να διαβασω απο οποιονδηποτε κομβο
+		val, exists := n.StoreGet(key)
+		if exists {
+			return val, n.Address, nil
+		}
+	}
+
 	hashedKey := hashString(key)
 	succ, err := n.FindSuccessor(hashedKey)
 	if err != nil {
@@ -139,4 +147,25 @@ func (n *Node) Delete(key string) (string, error) {
 		return "", fmt.Errorf("σφάλμα δικτύου: %v", err)
 	}
 	return succ.Address, nil
+}
+func (n *Node) ReplicateEventual(key, value string, isDelete bool) {
+	// Βρίσκουμε τους k κόμβους
+	successors, err := n.GetSuccessors(n.Address, n.K)
+	if err != nil || len(successors) <= 1 {
+		return
+	}
+
+	// 2. Προσπερνάμε τον εαυτό μας (i=0) και στέλνουμε στους υπόλοιπους
+	for i := 1; i < len(successors); i++ {
+		succAddr := successors[i]
+
+		// 3. Asynchronous call
+		go func(addr string) {
+			if isDelete {
+				n.call(addr, fmt.Sprintf("REPLICA_DELETE %s", key))
+			} else {
+				n.call(addr, fmt.Sprintf("REPLICA_INSERT %s %s", key, value))
+			}
+		}(succAddr)
+	}
 }

@@ -113,10 +113,59 @@ func (n *Node) HandleConnection(conn net.Conn) {
 
 		case "INSERT":
 			if len(args) >= 3 {
-				n.StorePut(args[1], strings.Join(args[2:], " "))
+				key := args[1]
+				val := strings.Join(args[2:], " ")
+				n.StorePut(key, val) // Αποθήκευση στον primary κόμβο
+
+				// replication trigger
+				if n.K > 1 && n.Consistency == "eventual" {
+					n.ReplicateEventual(key, val, false)
+				}
 				response = "OK"
 			} else {
 				response = "ERROR_BAD_INSERT"
+			}
+		case "REPLICA_INSERT": // Το δέχεται ένας replica κόμβος
+			if len(args) >= 3 {
+				key := args[1]
+				val := strings.Join(args[2:], " ")
+				n.StorePut(key, val)
+				response = "OK"
+			} else {
+				response = "ERROR_BAD_REPLICA_INSERT"
+			}
+		case "DELETE":
+			if len(args) == 2 {
+				key := args[1]
+				n.StoreDelete(key) // Διαγραφή από τον primary κόμβο
+
+				// trigger για διαγραφή και στους replica κόμβους
+				if n.K > 1 && n.Consistency == "eventual" {
+					n.ReplicateEventual(key, "", true)
+				}
+				response = "OK"
+			} else {
+				response = "ERROR_BAD_DELETE"
+			}
+		case "REPLICA_DELETE": // Το δέχεται ένας replica κόμβος
+			if len(args) == 2 {
+				n.StoreDelete(args[1])
+				response = "OK"
+			} else {
+				response = "ERROR_BAD_REPLICA_DELETE"
+			}
+		case "REBALANCE_REPLICAS":
+			if len(args) == 2 {
+				key := args[1]
+				val, exists := n.StoreGet(key)
+				if exists && n.K > 1 && n.Consistency == "eventual" {
+					successors, err := n.GetSuccessors(n.Address, n.K)
+					if err == nil && len(successors) == n.K {
+						lastSucc := successors[n.K-1]
+						n.call(lastSucc, fmt.Sprintf("REPLICA_INSERT %s %s", key, val))
+					}
+				}
+				response = "OK"
 			}
 
 		case "QUERY":
@@ -129,11 +178,6 @@ func (n *Node) HandleConnection(conn net.Conn) {
 				}
 			} else {
 				response = "ERROR_BAD_QUERY"
-			}
-		case "DELETE":
-			if len(args) == 2 {
-				n.StoreDelete(args[1])
-				response = "OK"
 			}
 		case "QUERY_ALL":
 			data := n.StoreGetAll()

@@ -14,6 +14,8 @@ type Node struct {
 	Predecessor *NodeInfo
 	DataTable   map[string]string // Τα δεδομενα του κομβου δηλαδη key,value του τραγουδιου
 	FingerTable []*NodeInfo
+	K           int          // Replication factor
+	Consistency string       // Μοντέλο συνέπειας (eventual / linear)
 	TableLock   sync.RWMutex // οταν καποιος παει να κανει insert delete κλειδωνει το map , επιτρεπει ομως σε πολλους να διαβαζουν ταυτοχρονα
 }
 
@@ -24,12 +26,14 @@ type NodeInfo struct {
 }
 
 // Συνάρτηση για να φτιάχνουμε έναν νέο κόμβο
-func NewNode(address string) *Node {
+func NewNode(address string, k int, consistency string) *Node {
 	return &Node{
 		ID:          hashString(address), //συναρτηση απο  hash.go
 		Address:     address,
 		DataTable:   make(map[string]string),
 		FingerTable: make([]*NodeInfo, 160), // θα μπορουσαμε και λιγοτερες θεσεις
+		K:           k,
+		Consistency: consistency,
 	}
 }
 
@@ -53,28 +57,63 @@ func (n *Node) Join(bootstrapAddr string) error {
 	fmt.Printf(" Ο Successor  είναι: %s\n", n.Successor.Address)
 	return nil
 }
-
 func (n *Node) Depart() {
 
 	if n.Successor != nil && n.Predecessor != nil && n.Successor.Address != n.Address {
-		// Ενημερώνουμε τον Predecessor μας να δείχνει πλέον ως Successor τον δικό μας Successor
-		n.call(n.Predecessor.Address, fmt.Sprintf("SET_SUCCESSOR %s,%s", n.Successor.Address, n.Successor.ID.String()))
-
-		// Ενημερώνουμε τον Successor μας να δείχνει πλέον ως Predecessor τον δικό μας Predecessor
-		n.call(n.Successor.Address, fmt.Sprintf("SET_PREDECESSOR %s,%s", n.Predecessor.Address, n.Predecessor.ID.String()))
-		//μεταφορα των κλειδιων του κομβου που φευγει στον successor του
 		n.TableLock.RLock()
 		fmt.Printf("Μεταφορά %d εγγραφών στον Successor (%s)...\n", len(n.DataTable), n.Successor.Address)
 
+		// Συλλέγουμε τα replica keys πριν ενημερώσουμε pointers
+		replicaKeys := []string{}
+		replicaPrimaries := map[string]string{}
+
 		for key, value := range n.DataTable {
-			_, err := n.call(n.Successor.Address, fmt.Sprintf("INSERT %s %s", key, value))
+			hashedKey := hashString(key)
+			primary, err := n.FindSuccessor(hashedKey)
 			if err != nil {
-				fmt.Printf("Σφάλμα μεταφοράς του '%s'\n", key)
+				continue
+			}
+
+			if primary.Address == n.Address {
+				// Είμαι PRIMARY → καθάρισε παλιά replicas και στείλε INSERT στον successor
+				if n.K > 1 && n.Consistency == "eventual" {
+					replicas, err := n.GetSuccessors(n.Successor.Address, n.K-1)
+					if err == nil {
+						for _, addr := range replicas {
+							n.call(addr, fmt.Sprintf("REPLICA_DELETE %s", key))
+						}
+					}
+				}
+				_, err := n.call(n.Successor.Address, fmt.Sprintf("INSERT %s %s", key, value))
+				if err != nil {
+					fmt.Printf("Σφάλμα μεταφοράς του '%s'\n", key)
+				} else {
+					fmt.Printf("Το '%s' (primary) μεταφέρθηκε με επιτυχία!\n", key)
+				}
 			} else {
-				fmt.Printf("Το '%s' μεταφέρθηκε με επιτυχία!\n", key)
+				// Είμαι REPLICA → θα ειδοποιήσουμε τον primary ΜΕΤΑ την ενημέρωση pointers
+				if n.K > 1 && n.Consistency == "eventual" {
+					replicaKeys = append(replicaKeys, key)
+					replicaPrimaries[key] = primary.Address
+				}
 			}
 		}
 		n.TableLock.RUnlock()
+
+		// Ενημέρωσε pointers ΠΡΙΝ το rebalance ώστε ο primary να βλέπει σωστό δακτύλιο
+		n.call(n.Predecessor.Address, fmt.Sprintf("SET_SUCCESSOR %s,%s", n.Successor.Address, n.Successor.ID.String()))
+		n.call(n.Successor.Address, fmt.Sprintf("SET_PREDECESSOR %s,%s", n.Predecessor.Address, n.Predecessor.ID.String()))
+
+		// Τώρα ειδοποίησε τους primaries για rebalance
+		for _, key := range replicaKeys {
+			primaryAddr := replicaPrimaries[key]
+			_, err := n.call(primaryAddr, fmt.Sprintf("REBALANCE_REPLICAS %s", key))
+			if err != nil {
+				fmt.Printf("Σφάλμα ειδοποίησης primary για '%s'\n", key)
+			} else {
+				fmt.Printf("Το '%s' (replica) → ειδοποιήθηκε ο primary %s\n", key, primaryAddr)
+			}
+		}
 	}
 	fmt.Println("Οι δείκτες ενημερώθηκαν. Ο κόμβος αποχωρεί.")
 }
