@@ -116,10 +116,16 @@ func (n *Node) HandleConnection(conn net.Conn) {
 				key := args[1]
 				val := strings.Join(args[2:], " ")
 				n.StorePut(key, val) // Αποθήκευση στον primary κόμβο
+				fullVal, _ := n.StoreGet(key)
 
 				// replication trigger
 				if n.K > 1 && n.Consistency == "eventual" {
-					n.ReplicateEventual(key, val, false)
+					n.ReplicateEventual(key, fullVal, false)
+				} else if n.K > 1 && n.Consistency == "linear" {
+					n.mu.RLock()
+					next := n.Successor
+					n.mu.RUnlock()
+					n.call(next.Address, fmt.Sprintf("CHAIN_WRITE %d %s %s", n.K-1, key, fullVal))
 				}
 				response = "OK"
 			} else {
@@ -129,55 +135,120 @@ func (n *Node) HandleConnection(conn net.Conn) {
 			if len(args) >= 3 {
 				key := args[1]
 				val := strings.Join(args[2:], " ")
-				n.StorePut(key, val)
+				n.StorePutOverwrite(key, val)
 				response = "OK"
 			} else {
 				response = "ERROR_BAD_REPLICA_INSERT"
 			}
 		case "DELETE":
-			if len(args) == 2 {
-				key := args[1]
-				n.StoreDelete(key) // Διαγραφή από τον primary κόμβο
+			if len(args) >= 2 {
+				key := strings.Join(args[1:], " ")
+				n.StoreDelete(key)
 
-				// trigger για διαγραφή και στους replica κόμβους
 				if n.K > 1 && n.Consistency == "eventual" {
 					n.ReplicateEventual(key, "", true)
+				} else if n.K > 1 && n.Consistency == "linear" {
+					n.mu.RLock()
+					next := n.Successor
+					n.mu.RUnlock()
+					n.call(next.Address, fmt.Sprintf("CHAIN_WRITE %d %s %s", n.K-1, key, ""))
 				}
 				response = "OK"
 			} else {
 				response = "ERROR_BAD_DELETE"
 			}
 		case "REPLICA_DELETE": // Το δέχεται ένας replica κόμβος
-			if len(args) == 2 {
-				n.StoreDelete(args[1])
+			if len(args) >= 2 {
+				key := strings.Join(args[1:], " ")
+				n.StoreDelete(key)
 				response = "OK"
 			} else {
 				response = "ERROR_BAD_REPLICA_DELETE"
 			}
+		case "CHAIN_WRITE":
+			if len(args) >= 4 {
+				var remaining int
+				fmt.Sscanf(args[1], "%d", &remaining)
+				key := args[2]
+				val := strings.Join(args[3:], " ")
+				n.StorePutOverwrite(key, val)
+				if remaining > 1 {
+					n.mu.RLock()
+					next := n.Successor
+					n.mu.RUnlock()
+					resp, err := n.call(next.Address, fmt.Sprintf("CHAIN_WRITE %d %s %s", remaining-1, key, val))
+					if err != nil || resp != "OK" {
+						response = "ERROR_CHAIN_WRITE"
+						break
+					}
+				}
+				response = "OK"
+			}
+
+		case "CHAIN_READ":
+			if len(args) >= 3 {
+				var remaining int
+				fmt.Sscanf(args[1], "%d", &remaining)
+				key := strings.Join(args[2:], " ")
+				if remaining <= 1 || n.Successor.Address == n.Address {
+					// Είμαι ο tail, επιστρέφω τοπικά
+					val, exists := n.StoreGet(key)
+					if exists {
+						response = val
+					} else {
+						response = "NOT_FOUND"
+					}
+				} else {
+					n.mu.RLock()
+					next := n.Successor
+					n.mu.RUnlock()
+					resp, err := n.call(next.Address, fmt.Sprintf("CHAIN_READ %d %s", remaining-1, key))
+					if err != nil {
+						response = "NOT_FOUND"
+					} else {
+						response = resp
+					}
+				}
+			}
 		case "REBALANCE_REPLICAS":
-			if len(args) == 2 {
-				key := args[1]
+			if len(args) >= 2 {
+				key := strings.Join(args[1:], " ")
 				val, exists := n.StoreGet(key)
-				if exists && n.K > 1 && n.Consistency == "eventual" {
-					successors, err := n.GetSuccessors(n.Address, n.K)
-					if err == nil && len(successors) == n.K {
-						lastSucc := successors[n.K-1]
-						n.call(lastSucc, fmt.Sprintf("REPLICA_INSERT %s %s", key, val))
+				if exists && n.K > 1 {
+					if n.Consistency == "eventual" {
+						successors, err := n.GetSuccessors(n.Address, n.K)
+						if err == nil && len(successors) == n.K {
+							lastSucc := successors[n.K-1]
+							n.call(lastSucc, fmt.Sprintf("REPLICA_INSERT %s %s", key, val))
+						}
+					} else if n.Consistency == "linear" {
+						n.mu.RLock()
+						next := n.Successor
+						n.mu.RUnlock()
+						n.call(next.Address, fmt.Sprintf("CHAIN_WRITE %d %s %s", n.K-1, key, val))
 					}
 				}
 				response = "OK"
 			}
 
 		case "QUERY":
-			if len(args) == 2 {
-				val, exists := n.StoreGet(args[1])
-				if exists {
-					response = val
+			if len(args) >= 2 {
+				key := strings.Join(args[1:], " ")
+				if n.Consistency == "linear" && n.K > 1 {
+					resp, err := n.call(n.Successor.Address, fmt.Sprintf("CHAIN_READ %d %s", n.K-1, key))
+					if err != nil {
+						response = "NOT_FOUND"
+					} else {
+						response = resp
+					}
 				} else {
-					response = "NOT_FOUND"
+					val, exists := n.StoreGet(key)
+					if exists {
+						response = val
+					} else {
+						response = "NOT_FOUND"
+					}
 				}
-			} else {
-				response = "ERROR_BAD_QUERY"
 			}
 		case "QUERY_ALL":
 			data := n.StoreGetAll()
@@ -199,6 +270,77 @@ func (n *Node) HandleConnection(conn net.Conn) {
 			succAddr := n.Successor.Address
 			n.mu.RUnlock()
 			response = fmt.Sprintf("Pred: %s | Succ: %s", predAddr, succAddr)
+		case "TRANSFER_KEYS":
+			// Ο νέος κόμβος ζητά τα keys που του ανήκουν
+			newNode := parseNodeInfo(args[1])
+			if newNode == nil {
+				response = "ERROR"
+				break
+			}
+			n.mu.RLock()
+			predID := n.Predecessor.ID
+			n.mu.RUnlock()
+
+			snapshot := n.StoreGetAll()
+			for key, val := range snapshot {
+				hashedKey := hashString(key)
+				// Το key ανήκει στον νέο κόμβο αν είναι στο (predecessor, newNode]
+				if checkRange(hashedKey, predID, newNode.ID) {
+					n.call(newNode.Address, fmt.Sprintf("TRANSFER %s %s", key, val))
+					n.StoreDelete(key)
+					// Καθαρισμός παλιών replicas
+					if n.K > 1 {
+						successors, err := n.GetSuccessors(n.Address, n.K)
+						if err == nil {
+							for i := 1; i < len(successors); i++ {
+								n.call(successors[i], fmt.Sprintf("REPLICA_DELETE %s", key))
+							}
+						}
+					}
+				}
+			}
+			response = "OK"
+
+		case "TRANSFER":
+			// Ο κόμβος λαμβάνει key από departing/joining κόμβο
+			if len(args) >= 3 {
+				key := args[1]
+				val := strings.Join(args[2:], " ")
+				n.StorePutOverwrite(key, val) // overwrite, όχι concat
+				// Trigger replication
+				if n.K > 1 && n.Consistency == "eventual" {
+					n.ReplicateEventual(key, val, false)
+				} else if n.K > 1 && n.Consistency == "linear" {
+					n.mu.RLock()
+					next := n.Successor
+					n.mu.RUnlock()
+					n.call(next.Address, fmt.Sprintf("CHAIN_WRITE %d %s %s", n.K-1, key, val))
+				}
+				response = "OK"
+			}
+		case "CLIENT_INSERT": //χρηση για scripts__
+			if len(args) >= 3 {
+				key := args[1]
+				val := strings.Join(args[2:], " ")
+				// Εδώ καλούμε τη μέθοδο του store.go που κάνει το σωστό DHT routing
+				_, err := n.Insert(key, val)
+				if err != nil {
+					response = "ERROR_ROUTING"
+				} else {
+					response = "OK"
+				}
+			}
+
+		case "CLIENT_QUERY":
+			if len(args) >= 2 {
+				key := strings.Join(args[1:], " ")
+				res, _, err := n.Query(key)
+				if err != nil {
+					response = "NOT_FOUND"
+				} else {
+					response = res
+				}
+			}
 		default:
 			response = "UNKNOWN_COMMAND"
 

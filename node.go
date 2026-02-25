@@ -53,6 +53,8 @@ func (n *Node) Join(bootstrapAddr string) error {
 
 	// 3. Ορίζουμε  τον Successor μας
 	n.Successor = newSuccessor
+	// Ζητάμε από τον successor τα keys που μας ανήκουν
+	n.call(newSuccessor.Address, fmt.Sprintf("TRANSFER_KEYS %s,%s", n.Address, n.ID.String()))
 
 	fmt.Printf(" Ο Successor  είναι: %s\n", n.Successor.Address)
 	return nil
@@ -75,16 +77,8 @@ func (n *Node) Depart() {
 			}
 
 			if primary.Address == n.Address {
-				// Είμαι PRIMARY → καθάρισε παλιά replicas και στείλε INSERT στον successor
-				if n.K > 1 && n.Consistency == "eventual" {
-					replicas, err := n.GetSuccessors(n.Successor.Address, n.K-1)
-					if err == nil {
-						for _, addr := range replicas {
-							n.call(addr, fmt.Sprintf("REPLICA_DELETE %s", key))
-						}
-					}
-				}
-				_, err := n.call(n.Successor.Address, fmt.Sprintf("INSERT %s %s", key, value))
+				// Είμαι PRIMARY → στέλνω TRANSFER στον successor (overwrite, όχι concat)
+				_, err := n.call(n.Successor.Address, fmt.Sprintf("TRANSFER %s %s", key, value))
 				if err != nil {
 					fmt.Printf("Σφάλμα μεταφοράς του '%s'\n", key)
 				} else {
@@ -92,7 +86,7 @@ func (n *Node) Depart() {
 				}
 			} else {
 				// Είμαι REPLICA → θα ειδοποιήσουμε τον primary ΜΕΤΑ την ενημέρωση pointers
-				if n.K > 1 && n.Consistency == "eventual" {
+				if n.K > 1 {
 					replicaKeys = append(replicaKeys, key)
 					replicaPrimaries[key] = primary.Address
 				}

@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
+	"time"
 )
 
 // ============================================================
@@ -76,12 +78,42 @@ func (n *Node) Insert(key, value string) (string, error) {
 
 func (n *Node) Query(key string) (string, string, error) {
 
-	if n.Consistency == "eventual" { // αν εχω eventual consistency μπορω να διαβασω απο οποιονδηποτε κομβο
-		val, exists := n.StoreGet(key)
-		if exists {
-			return val, n.Address, nil
+	if n.Consistency == "eventual" {
+		// 1. Βρίσκουμε τον Primary
+		hashedKey := hashString(key)
+		primaryNode, err := n.FindSuccessor(hashedKey)
+		if err != nil {
+			return "", "", fmt.Errorf("σφάλμα εύρεσης υπευθύνου: %v", err)
 		}
+
+		// 2. Παίρνουμε Primary + Replicas
+		replicas, err := n.GetSuccessors(primaryNode.Address, n.K)
+		if err != nil || len(replicas) == 0 {
+			replicas = []string{primaryNode.Address}
+		}
+
+		// 3. Διαλέγουμε τυχαία έναν
+		randomIndex := rand.Intn(len(replicas))
+		targetReplicaAddr := replicas[randomIndex]
+
+		// 4. Αν έτυχε να διαλέξει εμάς, ψάχνουμε τοπικά
+		if targetReplicaAddr == n.Address {
+			val, exists := n.StoreGet(key)
+			if exists {
+				return val, n.Address, nil
+			}
+			return "NOT_FOUND", n.Address, nil
+		}
+
+		// 5. Αλλιώς στέλνουμε το query στον τυχαίο replica
+		resp, err := n.call(targetReplicaAddr, fmt.Sprintf("QUERY %s", key))
+		if err == nil {
+			return resp, targetReplicaAddr, nil
+		}
+		return "NOT_FOUND", targetReplicaAddr, err
 	}
+
+	// === LINEAR CONSISTENCY ===
 
 	hashedKey := hashString(key)
 	succ, err := n.FindSuccessor(hashedKey)
@@ -161,6 +193,7 @@ func (n *Node) ReplicateEventual(key, value string, isDelete bool) {
 
 		// 3. Asynchronous call
 		go func(addr string) {
+			time.Sleep(2 * time.Second) // τεχνητό delay για να φαίνεται η ασυνέπεια
 			if isDelete {
 				n.call(addr, fmt.Sprintf("REPLICA_DELETE %s", key))
 			} else {
@@ -168,4 +201,9 @@ func (n *Node) ReplicateEventual(key, value string, isDelete bool) {
 			}
 		}(succAddr)
 	}
+}
+func (n *Node) StorePutOverwrite(key, value string) {
+	n.TableLock.Lock()
+	n.DataTable[key] = value
+	n.TableLock.Unlock()
 }
