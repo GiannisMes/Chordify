@@ -39,37 +39,58 @@ func NewNode(address string, k int, consistency string) *Node {
 
 func (n *Node) Join(bootstrapAddr string) error {
 	// 1. Στέλνουμε το μήνυμα FIND_SUCCESSOR στον bootstrap για το δικό μας ID
-	//γενικα το join tous enwnei pros ta mprosta
 	resp, err := n.call(bootstrapAddr, "FIND_SUCCESSOR "+n.ID.String())
 	if err != nil {
 		return fmt.Errorf("σφάλμα επικοινωνίας με τον bootstrap: %v", err)
 	}
 
-	// 2. Μετατρέπουμε το string που λάβαμε (π.χ. "127.0.0.1:8000,ID") σε NodeInfo
+	// 2. Μετατρέπουμε το string που λάβαμε σε NodeInfo
 	newSuccessor := parseNodeInfo(resp)
 	if newSuccessor == nil {
 		return fmt.Errorf("λάθος μορφή απάντησης από τον bootstrap")
 	}
 
-	// 3. Ορίζουμε  τον Successor μας
+	// 3. Ορίζουμε τον Successor μας
 	n.Successor = newSuccessor
-	// Ζητάμε από τον successor τα keys που μας ανήκουν
-	n.call(newSuccessor.Address, fmt.Sprintf("TRANSFER_KEYS %s,%s", n.Address, n.ID.String()))
 
-	fmt.Printf(" Ο Successor  είναι: %s\n", n.Successor.Address)
+	// 4. Βρίσκουμε τον predecessor του successor (= ο δικός μας predecessor)
+	predResp, err := n.call(newSuccessor.Address, "GET_PREDECESSOR")
+	var predID *big.Int
+	if err == nil && predResp != "NONE" {
+		predNode := parseNodeInfo(predResp)
+		if predNode != nil {
+			predID = predNode.ID
+		}
+	}
+	// Fallback: αν δεν βρούμε predecessor χρησιμοποιούμε τον successor
+	if predID == nil {
+		predID = newSuccessor.ID
+	}
+	fmt.Printf("DEBUG JOIN: newSuccessor=%s predID=%s myID=%s\n", newSuccessor.Address, predID.String(), n.ID.String())
+
+	// 5. Ζητάμε από τον successor τα keys που μας ανήκουν
+	n.call(newSuccessor.Address, fmt.Sprintf("TRANSFER_KEYS %s,%s,%s", n.Address, n.ID.String(), predID.String()))
+
+	fmt.Printf("Ο Successor είναι: %s\n", n.Successor.Address)
 	return nil
 }
 func (n *Node) Depart() {
-
 	if n.Successor != nil && n.Predecessor != nil && n.Successor.Address != n.Address {
+
 		n.TableLock.RLock()
-		fmt.Printf("Μεταφορά %d εγγραφών στον Successor (%s)...\n", len(n.DataTable), n.Successor.Address)
+		transferData := make(map[string]string)
+		for key, value := range n.DataTable {
+			transferData[key] = value
+		}
+		n.TableLock.RUnlock() // Απελευθερώνουμε το lock ΠΡΙΝ τα network calls
+
+		fmt.Printf("Μεταφορά %d εγγραφών στον Successor (%s)...\n", len(transferData), n.Successor.Address)
 
 		// Συλλέγουμε τα replica keys πριν ενημερώσουμε pointers
 		replicaKeys := []string{}
 		replicaPrimaries := map[string]string{}
 
-		for key, value := range n.DataTable {
+		for key, value := range transferData {
 			hashedKey := hashString(key)
 			primary, err := n.FindSuccessor(hashedKey)
 			if err != nil {
@@ -92,7 +113,6 @@ func (n *Node) Depart() {
 				}
 			}
 		}
-		n.TableLock.RUnlock()
 
 		// Ενημέρωσε pointers ΠΡΙΝ το rebalance ώστε ο primary να βλέπει σωστό δακτύλιο
 		n.call(n.Predecessor.Address, fmt.Sprintf("SET_SUCCESSOR %s,%s", n.Successor.Address, n.Successor.ID.String()))
@@ -110,4 +130,34 @@ func (n *Node) Depart() {
 		}
 	}
 	fmt.Println("Οι δείκτες ενημερώθηκαν. Ο κόμβος αποχωρεί.")
+}
+func (n *Node) RedistributeMyReplicas() {
+	snapshot := n.StoreGetAll()
+
+	for key, val := range snapshot {
+		hashedKey := hashString(key)
+		primary, err := n.FindSuccessor(hashedKey)
+		if err != nil {
+			continue
+		}
+
+		// Ελέγχουμε αν εμείς είμαστε ο Primary αυτού του κλειδιού
+		if primary.Address == n.Address {
+			// Στέλνουμε τα αντίγραφα στο νέο σετ κόμβων (που πλέον περιλαμβάνει τον νέο κόμβο)
+			if n.Consistency == "eventual" {
+				n.ReplicateEventual(key, val, false)
+			} else if n.Consistency == "linear" {
+				n.mu.RLock()
+				next := n.Successor
+				n.mu.RUnlock()
+				n.call(next.Address, fmt.Sprintf("CHAIN_WRITE %d %s %s", n.K-1, key, val))
+			}
+
+			// Καθαρίζουμε τον παλιό replica που βγήκε εκτός του νέου K-set
+			successors, err := n.GetSuccessors(n.Address, n.K+1)
+			if err == nil && len(successors) > n.K {
+				n.call(successors[n.K], fmt.Sprintf("REPLICA_DELETE %s", key))
+			}
+		}
+	}
 }

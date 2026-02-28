@@ -106,7 +106,11 @@ func (n *Node) Notify(potential *NodeInfo) {
 	}
 }
 
+// νεα stabilize func για να παρακολουθει k sucessors και να κανει ανακατανομη των replicas οταν αλλαζει το k-set
 func (n *Node) Stabilize() {
+	// Μεταβλητή για να θυμόμαστε τη λίστα των K successors
+	var lastKSuccessors []string
+
 	for {
 		time.Sleep(1 * time.Second)
 
@@ -133,6 +137,35 @@ func (n *Node) Stabilize() {
 
 		// Ειδοποιούμε τον επόμενο ότι υπάρχουμε
 		n.call(succ.Address, fmt.Sprintf("NOTIFY %s,%s", n.Address, n.ID.String())) // ← succ.Address
+
+		// --- ΝΕΑ ΛΟΓΙΚΗ: Παρακολούθηση όλου του K-set για το Replication ---
+		if n.K > 1 {
+			// Παίρνουμε τους τρέχοντες K successors
+			currentKSucc, err := n.GetSuccessors(n.Address, n.K)
+			if err == nil && len(currentKSucc) > 0 {
+				changed := false
+
+				// Ελέγχουμε αν άλλαξε κάτι σε σχέση με τον προηγούμενο κύκλο (το lastKSuccessors)
+				if len(currentKSucc) != len(lastKSuccessors) {
+					changed = true
+				} else {
+					for i := range currentKSucc {
+						if currentKSucc[i] != lastKSuccessors[i] {
+							changed = true
+							break
+						}
+					}
+				}
+
+				// Αν άλλαξε το K-set (π.χ. μπήκε/βγήκε κόμβος) και δεν είναι η πρώτη φορά που τρέχει (len > 0)
+				if changed && len(lastKSuccessors) > 0 {
+					go n.RedistributeMyReplicas() // Ανακατανομή των replicas μας!
+				}
+
+				// Ανανεώνουμε τη μνήμη μας για τον επόμενο κύκλο της λούπας
+				lastKSuccessors = currentKSucc
+			}
+		}
 	}
 }
 

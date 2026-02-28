@@ -151,7 +151,7 @@ func (n *Node) HandleConnection(conn net.Conn) {
 					n.mu.RLock()
 					next := n.Successor
 					n.mu.RUnlock()
-					n.call(next.Address, fmt.Sprintf("CHAIN_WRITE %d %s %s", n.K-1, key, ""))
+					n.call(next.Address, fmt.Sprintf("CHAIN_DELETE %d %s %s", n.K-1, key, ""))
 				}
 				response = "OK"
 			} else {
@@ -209,6 +209,30 @@ func (n *Node) HandleConnection(conn net.Conn) {
 						response = resp
 					}
 				}
+			}
+		case "CHAIN_DELETE":
+			if len(args) >= 3 {
+				var remaining int
+				fmt.Sscanf(args[1], "%d", &remaining)
+				key := strings.Join(args[2:], " ")
+
+				// 1. Διαγράφουμε τοπικά το κλειδί
+				n.StoreDelete(key)
+
+				// 2. Αν υπάρχουν κι άλλοι κόμβοι στην αλυσίδα, προωθούμε το delete
+				if remaining > 1 {
+					n.mu.RLock()
+					next := n.Successor
+					n.mu.RUnlock()
+					resp, err := n.call(next.Address, fmt.Sprintf("CHAIN_DELETE %d %s", remaining-1, key))
+					if err != nil || resp != "OK" {
+						response = "ERROR_CHAIN_DELETE"
+						break
+					}
+				}
+				response = "OK"
+			} else {
+				response = "ERROR_BAD_CHAIN_DELETE"
 			}
 		case "REBALANCE_REPLICAS":
 			if len(args) >= 2 {
@@ -271,36 +295,37 @@ func (n *Node) HandleConnection(conn net.Conn) {
 			n.mu.RUnlock()
 			response = fmt.Sprintf("Pred: %s | Succ: %s", predAddr, succAddr)
 		case "TRANSFER_KEYS":
-			// Ο νέος κόμβος ζητά τα keys που του ανήκουν
-			newNode := parseNodeInfo(args[1])
-			if newNode == nil {
+			parts := strings.Split(args[1], ",")
+			if len(parts) < 3 {
 				response = "ERROR"
 				break
 			}
-			n.mu.RLock()
-			predID := n.Predecessor.ID
-			n.mu.RUnlock()
+			newNode := &NodeInfo{Address: parts[0]}
+			newNode.ID, _ = new(big.Int).SetString(parts[1], 10)
+			predID, _ := new(big.Int).SetString(parts[2], 10)
 
 			snapshot := n.StoreGetAll()
 			for key, val := range snapshot {
 				hashedKey := hashString(key)
-				// Το key ανήκει στον νέο κόμβο αν είναι στο (predecessor, newNode]
-				if checkRange(hashedKey, predID, newNode.ID) {
-					n.call(newNode.Address, fmt.Sprintf("TRANSFER %s %s", key, val))
-					n.StoreDelete(key)
-					// Καθαρισμός παλιών replicas
-					if n.K > 1 {
-						successors, err := n.GetSuccessors(n.Address, n.K)
-						if err == nil {
-							for i := 1; i < len(successors); i++ {
-								n.call(successors[i], fmt.Sprintf("REPLICA_DELETE %s", key))
+				inRange := checkRange(hashedKey, predID, newNode.ID)
+
+				if inRange {
+					resp, err := n.call(newNode.Address, fmt.Sprintf("TRANSFER %s %s", key, val))
+
+					if err == nil && resp == "OK" {
+						n.StoreDelete(key)
+						if n.K > 1 {
+							successors, err := n.GetSuccessors(n.Address, n.K)
+							if err == nil {
+								for i := 1; i < len(successors); i++ {
+									n.call(successors[i], fmt.Sprintf("REPLICA_DELETE %s", key))
+								}
 							}
 						}
 					}
 				}
 			}
 			response = "OK"
-
 		case "TRANSFER":
 			// Ο κόμβος λαμβάνει key από departing/joining κόμβο
 			if len(args) >= 3 {

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
-	"time"
 )
 
 // ============================================================
@@ -193,7 +192,6 @@ func (n *Node) ReplicateEventual(key, value string, isDelete bool) {
 
 		// 3. Asynchronous call
 		go func(addr string) {
-			time.Sleep(2 * time.Second) // τεχνητό delay για να φαίνεται η ασυνέπεια
 			if isDelete {
 				n.call(addr, fmt.Sprintf("REPLICA_DELETE %s", key))
 			} else {

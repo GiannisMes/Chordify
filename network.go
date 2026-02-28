@@ -13,12 +13,12 @@ import (
 
 func (n *Node) call(address string, message string) (string, error) {
 	// 1. Άνοιγμα σύνδεσης (Socket) με τον άλλον κόμβο
-	conn, err := net.DialTimeout("tcp", address, 2*time.Second) //αν ο κόμβος που καλούμε είναι κάτω ή μη προσβάσιμος, η σύνδεση αποτυγχάνει σε max 2s
+	conn, err := net.DialTimeout("tcp", address, 10*time.Second) //αν ο κόμβος που καλούμε είναι κάτω ή μη προσβάσιμος, η σύνδεση αποτυγχάνει σε max 2s
 	if err != nil {
 		return "", err
 	}
 	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(2 * time.Second)) // αν η επικοινωνια αποτυχει
+	conn.SetDeadline(time.Now().Add(10 * time.Second)) // αν η επικοινωνια αποτυχει
 
 	// 2. Αποστολή του μηνύματος
 	fmt.Fprintln(conn, message)

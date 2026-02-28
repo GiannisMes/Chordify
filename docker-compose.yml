@@ -1,0 +1,79 @@
+services:
+  node0:
+    build: .
+    stdin_open: true
+    tty: true
+    command: ["-port", "8000", "-addr", "node0", "-k", "${K_VAL}", "-consistency", "${CONSISTENCY}", "-interactive"]
+    ports: ["8000:8000"]
+
+  node1:
+    build: .
+    stdin_open: true
+    tty: true
+    depends_on: [node0]
+    command: ["-port", "8001", "-addr", "node1", "-bootstrap", "node0:8000", "-k", "${K_VAL}", "-consistency", "${CONSISTENCY}", "-interactive"]
+    ports: ["8001:8001"]
+
+  node2:
+    build: .
+    stdin_open: true
+    tty: true
+    depends_on: [node0]
+    command: ["-port", "8002", "-addr", "node2", "-bootstrap", "node0:8000", "-k", "${K_VAL}", "-consistency", "${CONSISTENCY}", "-interactive"]
+    ports: ["8002:8002"]
+
+  node3:
+    build: .
+    stdin_open: true
+    tty: true
+    depends_on: [node0]
+    command: ["-port", "8003", "-addr", "node3", "-bootstrap", "node0:8000", "-k", "${K_VAL}", "-consistency", "${CONSISTENCY}", "-interactive"]
+    ports: ["8003:8003"]
+
+  node4:
+    build: .
+    stdin_open: true
+    tty: true
+    depends_on: [node0]
+    command: ["-port", "8004", "-addr", "node4", "-bootstrap", "node0:8000", "-k", "${K_VAL}", "-consistency", "${CONSISTENCY}", "-interactive"]
+    ports: ["8004:8004"]
+
+  node5:
+    build: .
+    stdin_open: true
+    tty: true
+    depends_on: [node0]
+    command: ["-port", "8005", "-addr", "node5", "-bootstrap", "node0:8000", "-k", "${K_VAL}", "-consistency", "${CONSISTENCY}", "-interactive"]
+    ports: ["8005:8005"]
+
+  node6:
+    build: .
+    stdin_open: true
+    tty: true
+    depends_on: [node0]
+    command: ["-port", "8006", "-addr", "node6", "-bootstrap", "node0:8000", "-k", "${K_VAL}", "-consistency", "${CONSISTENCY}", "-interactive"]
+    ports: ["8006:8006"]
+
+  node7:
+    build: .
+    stdin_open: true
+    tty: true
+    depends_on: [node0]
+    command: ["-port", "8007", "-addr", "node7", "-bootstrap", "node0:8000", "-k", "${K_VAL}", "-consistency", "${CONSISTENCY}", "-interactive"]
+    ports: ["8007:8007"]
+
+  node8:
+    build: .
+    stdin_open: true
+    tty: true
+    depends_on: [node0]
+    command: ["-port", "8008", "-addr", "node8", "-bootstrap", "node0:8000", "-k", "${K_VAL}", "-consistency", "${CONSISTENCY}", "-interactive"]
+    ports: ["8008:8008"]
+
+  node9:
+    build: .
+    stdin_open: true
+    tty: true
+    depends_on: [node0]
+    command: ["-port", "8009", "-addr", "node9", "-bootstrap", "node0:8000", "-k", "${K_VAL}", "-consistency", "${CONSISTENCY}", "-interactive"]
+    ports: ["8009:8009"]
