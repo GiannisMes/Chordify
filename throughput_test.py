@@ -18,7 +18,8 @@ def send_command(host, port, command):
 
 def worker(node_id, action_type, results_dict):
     port = 8000 + node_id
-    filename = f"{action_type.lower()}_{node_id:02d}.txt"
+    # Χρήση του os.path.join για το dataset folder
+    filename = os.path.join("dataset", f"{action_type.lower()}_{node_id:02d}.txt")
     req_count = 0
 
     if not os.path.exists(filename):
@@ -77,17 +78,17 @@ def run_concurrent_test(num_nodes, action_type):
 
 if __name__ == "__main__":
     num_nodes = 10
-    k = int(sys.argv[1]) if len(sys.argv) > 1 else 3
-    consistency = sys.argv[2] if len(sys.argv) > 2 else "eventual"
 
-    print(f"=== ΠΕΙΡΑΜΑ: K={k} | CONSISTENCY={consistency.upper()} ===")
-    print(f"(Οι κόμβοι τρέχουν ήδη σε Docker στα ports 8000-8009)")
+    print("=== CHORDIFY THROUGHPUT TEST (DOCKER) ===")
+    print(f"(Σύνδεση σε {num_nodes} κόμβους στα ports 8000-8009)")
 
     # 1. Write Throughput
     run_concurrent_test(num_nodes, "INSERT")
 
-    print("\nΠεριμένουμε 3s για σταθεροποίηση replicas...")
+    print("\nΠεριμένουμε 3s για σταθεροποίηση replicas (Eventual Consistency)...")
     time.sleep(3)
 
     # 2. Read Throughput
     run_concurrent_test(num_nodes, "QUERY")
+    
+    print("\nΤο πείραμα ολοκληρώθηκε.")

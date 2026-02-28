@@ -66,7 +66,6 @@ func (n *Node) Join(bootstrapAddr string) error {
 	if predID == nil {
 		predID = newSuccessor.ID
 	}
-	fmt.Printf("DEBUG JOIN: newSuccessor=%s predID=%s myID=%s\n", newSuccessor.Address, predID.String(), n.ID.String())
 
 	// 5. Ζητάμε από τον successor τα keys που μας ανήκουν
 	n.call(newSuccessor.Address, fmt.Sprintf("TRANSFER_KEYS %s,%s,%s", n.Address, n.ID.String(), predID.String()))
