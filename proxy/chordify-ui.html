@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+<meta charset="UTF-8">
+<title>Chordify Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Bebas+Neue&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#070a0f;--surf:#0d1117;--surf2:#131920;--bord:#1e2d3d;--acc:#00d4ff;--grn:#39ff14;--org:#ff6b35;--red:#ff4444;--ylw:#f59e0b;--txt:#c9d1d9;--dim:#6b7890;--bright:#e6edf3}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--txt);font-family:'Share Tech Mono',monospace;display:flex;flex-direction:column}
+body::before{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.025) 2px,rgba(0,0,0,.025) 4px);pointer-events:none;z-index:9999}
+
+header{display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:48px;border-bottom:1px solid var(--bord);background:rgba(13,17,23,.98);flex-shrink:0;z-index:10}
+.logo{display:flex;align-items:center;gap:10px}
+.logo-ring{width:26px;height:26px;border:1.5px solid var(--acc);border-radius:50%;display:flex;align-items:center;justify-content:center;animation:spin 20s linear infinite}
+.logo-ring::before{content:'';width:6px;height:6px;background:var(--acc);border-radius:50%;box-shadow:0 0 8px var(--acc)}
+@keyframes spin{to{transform:rotate(360deg)}}
+h1{font-family:'Bebas Neue';font-size:22px;letter-spacing:5px;color:var(--bright)}
+h1 span{color:var(--acc)}
+.hright{display:flex;align-items:center;gap:10px}
+.pill{display:flex;align-items:center;gap:5px;padding:3px 10px;border:1px solid var(--bord);background:var(--surf);font-size:10px;color:var(--dim)}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--grn);box-shadow:0 0 5px var(--grn);animation:pulse 2s infinite}
+.dot.off{background:var(--red);box-shadow:0 0 5px var(--red);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.cbadge{padding:8px 18px;font-size:13px;font-weight:bold;letter-spacing:2px;border-radius:2px}
+.cbadge.eventual{background:rgba(245,158,11,.12);border:1px solid var(--ylw);color:var(--ylw)}
+.cbadge.linear{background:rgba(0,212,255,.1);border:1px solid var(--acc);color:var(--acc)}
+.hbtn{padding:8px 18px;font-family:'Share Tech Mono';font-size:13px;letter-spacing:1px;border:1px solid var(--bord);background:transparent;color:var(--dim);cursor:pointer;transition:.2s}
+
+.hbtn:hover{border-color:var(--acc);color:var(--acc)}
+
+.stats{display:flex;border-bottom:1px solid var(--bord);flex-shrink:0;z-index:1}
+.sc{flex:1;padding:7px 18px;border-right:1px solid var(--bord)}
+.sc:last-child{border-right:none}
+.sl{font-size:11px;letter-spacing:2px;color:var(--dim);text-transform:uppercase;margin-bottom:1px}
+.sv{font-family:'Bebas Neue';font-size:20px;letter-spacing:2px;color:var(--bright)}
+
+.workspace{flex:1;display:grid;grid-template-columns:280px 1fr 280px;min-height:0}
+.col{display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--bord)}
+.col:last-child{border-right:none;border-left:1px solid var(--bord)}
+.col-h{padding:9px 14px;border-bottom:1px solid var(--bord);background:var(--surf);display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.col-t{font-size:10px;letter-spacing:3px;color:var(--acc);text-transform:uppercase}
+.col-b{font-size:10px;color:var(--dim);background:var(--surf2);padding:2px 8px;border:1px solid var(--bord)}
+.col-body{flex:1;overflow-y:auto;padding:10px}
+.col-body::-webkit-scrollbar{width:3px}
+.col-body::-webkit-scrollbar-thumb{background:var(--bord)}
+
+.mid{display:flex;flex-direction:column;overflow:hidden}
+.ring-wrap{flex:1;position:relative;min-height:0;background:radial-gradient(ellipse at center,rgba(0,212,255,.03) 0%,transparent 70%)}
+#c{position:absolute;top:0;left:0;width:100%;height:100%}
+.ring-lbl{position:absolute;top:10px;left:14px;font-size:11px;letter-spacing:2px;color:var(--dim);pointer-events:none}
+.ring-lbl span{color:var(--acc)}
+.mode-tag{position:absolute;bottom:8px;right:10px;font-size:9px;letter-spacing:2px;padding:2px 7px;border:1px solid var(--bord);color:var(--dim);pointer-events:none}
+.mode-tag.live{border-color:var(--grn);color:var(--grn)}
+
+.ops{border-top:1px solid var(--bord);background:var(--surf);padding:10px 14px;flex-shrink:0}
+.tabs{display:flex;border:1px solid var(--bord);margin-bottom:9px}
+.tab{flex:1;padding:10px;font-family:'Share Tech Mono';font-size:12px;letter-spacing:2px;text-transform:uppercase;border:none;background:transparent;color:var(--dim);cursor:pointer;transition:.2s;border-right:1px solid var(--bord)}
+.tab:last-child{border-right:none}
+.tab.on{background:var(--acc);color:var(--bg);font-weight:bold}
+.tab:hover:not(.on){color:var(--acc)}
+.form{display:none;gap:7px;align-items:flex-end}
+.form.on{display:flex}
+.fg{display:flex;flex-direction:column;gap:3px;flex:1}
+.fl{font-size:11px;letter-spacing:2px;color:var(--dim);text-transform:uppercase}
+.fi{background:var(--bg);border:1px solid var(--bord);color:var(--bright);font-family:'Share Tech Mono';font-size:13px;padding:9px 10px;outline:none;transition:.2s;width:100%}
+.fi:focus{border-color:var(--acc)}
+.xbtn{padding:10px 22px;font-family:'Share Tech Mono';font-size:13px;letter-spacing:2px;text-transform:uppercase;border:1px solid var(--acc);background:rgba(0,212,255,.1);color:var(--acc);cursor:pointer;transition:.2s;white-space:nowrap;flex-shrink:0}
+.xbtn:hover{background:var(--acc);color:var(--bg)}
+.xbtn.del{border-color:var(--red);background:rgba(255,68,68,.1);color:var(--red)}
+.xbtn.del:hover{background:var(--red);color:#fff}
+.res{margin-top:7px;padding:8px 10px;background:var(--bg);border:1px solid var(--bord);border-left:3px solid var(--acc);font-size:12px;display:none;white-space:pre-wrap;line-height:1.6;max-height:220px;overflow-y:auto}
+
+.res.on{display:block}
+.res.ok{border-left-color:var(--grn)}
+.res.err{border-left-color:var(--red)}
+
+.ncard{border:1px solid var(--bord);background:var(--surf);margin-bottom:7px;cursor:pointer;transition:.2s;position:relative;overflow:hidden}
+.ncard::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--nc,var(--acc));box-shadow:0 0 6px var(--nc,var(--acc))}
+.ncard:hover,.ncard.on{border-color:var(--nc,var(--acc));background:var(--surf2)}
+.nch{display:flex;align-items:center;justify-content:space-between;padding:8px 10px 8px 13px}
+.ncn{font-size:13px;font-weight:700;color:var(--bright)}
+.nci{font-size:9px;color:var(--dim);margin-top:1px}
+.ncp{font-size:10px;color:var(--nc,var(--acc))}
+.ncb{padding:0 10px 9px 13px;display:none}
+.ncard.on .ncb{display:block}
+.ncg{display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:5px}
+.ncs{background:var(--surf2);padding:5px 7px;border:1px solid var(--bord)}
+.ncsl{font-size:9px;color:var(--dim)}
+.ncsv{font-size:12px;color:var(--bright)}
+.ncact{display:flex;gap:5px;margin-top:7px}
+.ncbtn{flex:1;padding:4px;font-family:'Share Tech Mono';font-size:10px;letter-spacing:1px;border:1px solid var(--bord);background:transparent;color:var(--dim);cursor:pointer;transition:.2s;text-transform:uppercase}
+.ncbtn:hover{border-color:var(--acc);color:var(--acc)}
+
+.le{padding:5px 0;border-bottom:1px solid rgba(30,45,61,.4);font-size:11px;line-height:1.5;animation:fin .2s}
+@keyframes fin{from{opacity:0;transform:translateX(6px)}to{opacity:1;transform:none}}
+.lt{color:#5a6878;margin-right:5px}
+.lo{letter-spacing:1px;margin-right:4px}
+.lo.INSERT{color:var(--grn)}.lo.QUERY{color:var(--acc)}.lo.DELETE{color:var(--red)}.lo.SYS{color:var(--dim)}.lo.ERR{color:var(--red)}
+.lnode{font-size:9px;color:var(--org);margin-top:1px}
+.cur::after{content:'_';animation:bl 1s step-end infinite}
+@keyframes bl{0%,100%{opacity:1}50%{opacity:0}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-ring"></div>
+    <h1>CHORD<span>IFY</span></h1>
+  </div>
+  <div class="hright">
+    
+    <div class="cbadge eventual" id="cbadge">EVENTUAL</div>
+    <button class="hbtn" onclick="refreshOverlay()">↻ REFRESH</button>
+    <button class="hbtn" onclick="testConn()">⬡ PING</button>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="sc"><div class="sl">Active Nodes</div><div class="sv" id="sN">—</div></div>
+  <div class="sc"><div class="sl">Total Keys</div><div class="sv" id="sK">—</div></div>
+  <div class="sc"><div class="sl">Replication K</div><div class="sv" id="sR">—</div></div>
+  <div class="sc"><div class="sl">Operations</div><div class="sv" id="sO">0</div></div>
+  <div class="sc"><div class="sl">Proxy</div><div class="sv" style="font-size:12px;letter-spacing:0" id="sProxy">:8080</div></div>
+</div>
+
+<div class="workspace">
+
+  <div class="col">
+    <div class="col-h"><span class="col-t">◈ Ring Nodes</span><span class="col-b" id="nCount">0 nodes</span></div>
+    <div class="col-body" id="nodeList">
+      <div style="color:var(--dim);font-size:11px;margin-top:20px;text-align:center;line-height:2">
+        Κάνε κλικ στο<br><strong style="color:var(--acc)">⬡ PING</strong><br>για σύνδεση
+      </div>
+    </div>
+  </div>
+
+  <div class="mid">
+    <div class="ring-wrap">
+      <canvas id="c"></canvas>
+      <div class="ring-lbl">SHA-1 · <span>160-bit</span> &nbsp;|&nbsp; <span id="rN">0</span> NODES</div>
+  
+    </div>
+    <div class="ops">
+      <div class="tabs">
+        <button class="tab on" onclick="switchTab('insert')">INSERT</button>
+        <button class="tab" onclick="switchTab('query')">QUERY</button>
+        <button class="tab" onclick="switchTab('delete')">DELETE</button>
+        <button class="tab" onclick="switchTab('overlay')">OVERLAY</button>
+        <button class="tab" onclick="switchTab('throughput')">THROUGHPUT</button>
+      </div>
+      <div class="form on" id="f-insert">
+        <div class="fg"><label class="fl">Key</label><input class="fi" id="iK" placeholder="π.χ. Bohemian_Rhapsody"></div>
+        <div class="fg"><label class="fl">Value</label><input class="fi" id="iV" placeholder="π.χ. 1001"></div>
+        <button class="xbtn" onclick="doInsert()">→ EXEC</button>
+      </div>
+      <div class="form" id="f-query">
+        <div class="fg"><label class="fl">Key (* για όλα)</label><input class="fi" id="qK" placeholder="Hey_Jude ή *"></div>
+        <button class="xbtn" onclick="doQuery()">→ QUERY</button>
+      </div>
+      <div class="form" id="f-delete">
+        <div class="fg"><label class="fl">Key</label><input class="fi" id="dK" placeholder="Key προς διαγραφή"></div>
+        <button class="xbtn del" onclick="doDelete()">✕ DELETE</button>
+      </div>
+      <div class="form" id="f-overlay">
+        <button class="xbtn" style="width:100%" onclick="refreshOverlay()">↻ REFRESH OVERLAY</button>
+      </div>
+      <div class="form" id="f-throughput">
+        <button class="xbtn" style="width:100%" id="tBtn" onclick="runThroughputTest()">▶ RUN THROUGHPUT TEST</button>
+      </div>
+      <div class="res" id="res"></div>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="col-h"><span class="col-t">▸ Log</span><button class="hbtn" onclick="clearLog()">CLEAR</button></div>
+    <div class="col-body" id="logPanel">
+      <div class="le"><span class="lt">--:--:--</span><span class="lo SYS">SYS</span>Chordify Dashboard ready<span class="cur"></span></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const PROXY = 'http://localhost:8080';
+let ops=0, cons='eventual', nodes=[], isLive=false, sel=null;
+
+async function api(path) {
+  try {
+    const r = await fetch(PROXY + path);
+    const txt = await r.text();
+    try { return {ok:r.ok, data:JSON.parse(txt)}; }
+    catch { return {ok:r.ok, data:txt}; }
+  } catch(e) {
+    return {ok:false, data:null, err:e.message};
+  }
+}
+
+async function testConn() {
+  addLog('SYS','Connecting to proxy...');
+  const r = await api('/ping');
+  if (r.ok) {
+    setOnline(true);
+    addLog('SYS','Connected! NODE0 (localhost:8000)');
+    
+    const sr = await api('/sysinfo');
+    if (sr.ok && sr.data.k) {
+       document.getElementById('sR').textContent = sr.data.k;
+       cons = sr.data.consistency;
+       const b = document.getElementById('cbadge');
+       b.textContent = cons.toUpperCase();
+       b.className = 'cbadge ' + cons;
+    }
+
+    showRes('✓ CONNECTED\nProxy: '+PROXY+'\nBootstrap: '+(r.data?.node||'—'), 'ok');
+    refreshOverlay();
+  } else {
+    setOnline(false);
+    addLog('ERR','Cannot reach '+PROXY+' — '+( r.err||'server down'));
+    showRes('✗ OFFLINE — proxy δεν τρέχει', 'err');
+  }
+}
+
+function setOnline(v) {
+  isLive = v;
+
+}
+
+async function refreshOverlay() {
+  if (!isLive) { showRes('✗ Κάνε PING πρώτα','err'); return; }
+  const r = await api('/overlay');
+  if (!r.ok || !Array.isArray(r.data)) { addLog('ERR','Overlay failed'); return; }
+
+  const colors = ['#00d4ff','#39ff14','#ff6b35','#a78bfa','#f59e0b','#ff4444','#00ffcc','#ff69b4','#7dd3fc','#fbbf24'];
+  
+  // ΤΑΞΙΝΟΜΗΣΗ ΒΑΣΕΙ SHA-1 ID (BigInt)
+  nodes = r.data.map((nd,i) => ({
+    id:   'NODE' + (nd.address.split(':')[1] - 8000),
+    rawId: nd.id, 
+    addr: nd.address,
+    shortId: nd.id ? '0x'+nd.id.substring(0,6) : '0x???',
+    pred: nd.predecessor,
+    succ: nd.successor,
+    keys: 0,
+    color: colors[i % colors.length],
+  })).sort((a, b) => {
+      if (!a.rawId || !b.rawId) return 0;
+      return BigInt(a.rawId) < BigInt(b.rawId) ? -1 : (BigInt(a.rawId) > BigInt(b.rawId) ? 1 : 0);
+  });
+
+  // ΚΑΤΑΜΕΤΡΗΣΗ UNIQUE ΚΑΙ PHYSICAL KEYS
+  const kr = await api('/queryall');
+  let uniqueKeys = new Set();
+  let totalPhysicalKeys = 0;
+  
+  if (kr.ok && kr.data && typeof kr.data==='object') {
+    Object.entries(kr.data).forEach(([addr,kv])=>{
+      const nd = nodes.find(n=>n.addr===addr);
+      const cnt = Object.keys(kv).length;
+      if(nd) nd.keys = cnt;
+      
+      totalPhysicalKeys += cnt; // Σύνολο Physical Keys
+      Object.keys(kv).forEach(k => uniqueKeys.add(k)); // Σύνολο Unique Keys
+    });
+  }
+  
+  document.getElementById('sN').textContent = nodes.length;
+  document.getElementById('sK').innerHTML = uniqueKeys.size + '<span style="font-size:12px; color:var(--dim); font-family:\'Share Tech Mono\'"> / ' + totalPhysicalKeys + ' TOTAL</span>';
+  document.getElementById('rN').textContent = nodes.length;
+  document.getElementById('nCount').textContent = nodes.length+' nodes';
+  
+  renderNodes();
+  addLog('SYS','Overlay: '+nodes.length+' nodes, '+uniqueKeys.size+' unique keys ('+totalPhysicalKeys+' total)');
+}
+
+async function doInsert() {
+  const k=document.getElementById('iK').value.trim(), v=document.getElementById('iV').value.trim();
+  if(!k||!v){showRes('ERROR: key και value απαιτούνται','err');return}
+  if(!isLive){showRes('ERROR: Κάνε PING πρώτα','err');return}
+  ops++;
+  const r = await api(`/insert?key=${enc(k)}&value=${enc(v)}`);
+  if(r.ok){
+    addLog('INSERT',k+' = '+v, r.data?.result);
+    showRes('✓ OK — "'+k+'" αποθηκεύτηκε\nServer: '+JSON.stringify(r.data),'ok');
+    document.getElementById('iK').value='';
+    document.getElementById('iV').value='';
+    setTimeout(refreshOverlay, 1200); // 1.2s timeout για Eventual Consistency
+  } else {
+    addLog('ERR','INSERT '+k+' failed');
+    showRes('✗ ERROR: '+JSON.stringify(r.data),'err');
+  }
+  updStats();
+}
+
+async function doQuery() {
+  const k=document.getElementById('qK').value.trim();
+  if(!k){showRes('ERROR: key απαιτείται','err');return}
+  if(!isLive){showRes('ERROR: Κάνε PING πρώτα','err');return}
+  ops++;
+  if(k==='*'){
+    const r=await api('/queryall');
+    if(r.ok){
+      let txt='QUERY ALL:\n'; let tot=0;
+      Object.entries(r.data).forEach(([addr,kv])=>{
+        txt+='\n['+addr+']\n';
+        Object.entries(kv).forEach(([key,val])=>{txt+='  '+key+': '+val+'\n';tot++;});
+      });
+      txt+='Σύνολο: '+tot+' keys (μαζί με τα replicas)';
+      showRes(txt,'ok');
+      addLog('QUERY','* → '+tot+' entries');
+    }
+  } else {
+    const r=await api('/query?key='+enc(k));
+    const res=r.data?.result;
+if(r.ok && res && res!=='NOT_FOUND'){
+      addLog('QUERY',k+' → '+res);
+      showRes('✓ FOUND\nKey:   '+k+'\nValue: '+res,'ok');
+    } else {
+      addLog('QUERY',k+' → NOT_FOUND');
+      showRes('✗ NOT_FOUND — "'+k+'"','err');
+    }
+  }
+  document.getElementById('qK').value='';
+  updStats();
+}
+
+async function doDelete() {
+  const k=document.getElementById('dK').value.trim();
+  if(!k){showRes('ERROR: key απαιτείται','err');return}
+  if(!isLive){showRes('ERROR: Κάνε PING πρώτα','err');return}
+  ops++;
+  const r=await api('/delete?key='+enc(k));
+ const res=r.data?.result;
+if(r.ok && res && res!=='NOT_FOUND'){
+    addLog('DELETE',k+' → OK');
+    showRes('✓ DELETED — "'+k+'"','ok');
+    document.getElementById('dK').value='';
+    setTimeout(refreshOverlay, 1200); // 1.2s timeout για Eventual Consistency
+  } else {
+    addLog('DELETE',k+' → NOT_FOUND');
+    showRes('✗ NOT_FOUND — "'+k+'"','err');
+  }
+  updStats();
+}
+
+async function departNode(addr) {
+  if(!confirm('Σίγουρα θέλεις να τερματίσεις ομαλά τον κόμβο ' + addr + '?')) return;
+  addLog('SYS', 'Departing ' + addr + '...');
+  const r = await api('/depart?addr=' + enc(addr));
+  if (r.ok) {
+      showRes('✓ DEPART INITIATED\nΟ κόμβος ' + addr + ' μεταφέρει κλειδιά και κλείνει...','ok');
+      setTimeout(refreshOverlay, 2500); // Δίνει χρόνο στο container να τερματίσει και στο δίκτυο να επουλωθεί
+  }
+}
+
+// ── RING ─────────────────────────────────────────
+const cv=document.getElementById('c'), ct=cv.getContext('2d');
+let anim=0;
+function resize(){cv.width=cv.parentElement.clientWidth;cv.height=cv.parentElement.clientHeight}
+
+function draw(){
+  const W=cv.width,H=cv.height; ct.clearRect(0,0,W,H);
+  const ox=W/2,oy=H/2,R=Math.min(W,H)*0.33; anim+=.007;
+
+  const hl=ct.createRadialGradient(ox,oy,R-2,ox,oy,R+18);
+  hl.addColorStop(0,'rgba(0,212,255,.05)');hl.addColorStop(1,'transparent');
+  ct.beginPath();ct.arc(ox,oy,R+9,0,Math.PI*2);ct.fillStyle=hl;ct.fill();
+
+  ct.beginPath();ct.arc(ox,oy,R,0,Math.PI*2);
+  ct.strokeStyle='rgba(30,45,61,.9)';ct.lineWidth=1.5;ct.stroke();
+
+  for(let i=0;i<32;i++){
+    const a=(i/32)*Math.PI*2-Math.PI/2,big=i%4===0;
+    ct.beginPath();
+    ct.moveTo(ox+Math.cos(a)*(R-(big?8:4)),oy+Math.sin(a)*(R-(big?8:4)));
+    ct.lineTo(ox+Math.cos(a)*R,oy+Math.sin(a)*R);
+    ct.strokeStyle=big?'rgba(0,212,255,.3)':'rgba(30,45,61,1)';
+    ct.lineWidth=1;ct.stroke();
+  }
+
+  const n=nodes.length;
+  if(n>0){
+    nodes.forEach((nd,i)=>{
+      const a1=(i/n)*Math.PI*2-Math.PI/2,a2=((i+1)%n/n)*Math.PI*2-Math.PI/2;
+      ct.beginPath();ct.arc(ox,oy,R,a1,a2);
+      ct.strokeStyle=nd.color+'55';ct.lineWidth=4;ct.stroke();
+    });
+
+    const fa=anim%(Math.PI*2)-Math.PI/2,fx=ox+Math.cos(fa)*R,fy=oy+Math.sin(fa)*R;
+    const fg=ct.createRadialGradient(fx,fy,0,fx,fy,10);
+    fg.addColorStop(0,'rgba(0,212,255,.9)');fg.addColorStop(1,'transparent');
+    ct.beginPath();ct.arc(fx,fy,5,0,Math.PI*2);ct.fillStyle=fg;ct.fill();
+
+    nodes.forEach((nd,i)=>{
+      const angle=(i/n)*Math.PI*2-Math.PI/2,x=ox+Math.cos(angle)*R,y=oy+Math.sin(angle)*R;
+      const s=sel===nd.id,nr=s?13:9;
+      if(s){const g=ct.createRadialGradient(x,y,0,x,y,28);g.addColorStop(0,nd.color+'44');g.addColorStop(1,'transparent');ct.beginPath();ct.arc(x,y,28,0,Math.PI*2);ct.fillStyle=g;ct.fill()}
+      ct.beginPath();ct.arc(x,y,nr+4,0,Math.PI*2);ct.strokeStyle=nd.color+(s?'bb':'33');ct.lineWidth=1;ct.stroke();
+      ct.beginPath();ct.arc(x,y,nr,0,Math.PI*2);ct.fillStyle=s?nd.color:nd.color+'cc';ct.fill();
+      ct.strokeStyle='#070a0f';ct.lineWidth=2;ct.stroke();
+      const lr=R+40,lx=ox+Math.cos(angle)*lr,ly=oy+Math.sin(angle)*lr;
+      ct.font='bold 13px "Share Tech Mono"';ct.fillStyle='#e6edf3';
+      ct.textAlign='center';ct.textBaseline='middle';const label='NODE'+(nd.addr.split(':')[1]-8000); ct.fillText(label,lx,ly);
+      ct.font='11px "Share Tech Mono"';ct.fillStyle='#aabbcc';ct.fillText('['+nd.keys+' keys]',lx,ly+18);
+    });
+  }
+
+  ct.font='bold 22px "Bebas Neue"';ct.fillStyle='rgba(0,212,255,.35)';
+  ct.textAlign='center';ct.textBaseline='middle';ct.fillText('CHORD',ox,oy-9);
+  ct.font='11px "Share Tech Mono"';ct.fillStyle='#4a5568';
+  ct.fillText('DHT RING',ox,oy+7);
+  if(n>0) ct.fillText(n+' nodes',ox,oy+21);
+
+  requestAnimationFrame(draw);
+}
+
+cv.addEventListener('click',e=>{
+  const r=cv.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+  const ox=cv.width/2,oy=cv.height/2,R=Math.min(cv.width,cv.height)*0.36;
+  nodes.forEach((nd,i)=>{
+    const a=(i/nodes.length)*Math.PI*2-Math.PI/2;
+    const dx=mx-(ox+Math.cos(a)*R),dy=my-(oy+Math.sin(a)*R);
+    if(Math.sqrt(dx*dx+dy*dy)<26){sel=sel===nd.id?null:nd.id;renderNodes();}
+  });
+});
+
+function renderNodes(){
+  const el=document.getElementById('nodeList'); el.innerHTML='';
+  nodes.forEach(nd=>{
+    const d=document.createElement('div');
+    d.className='ncard'+(sel===nd.id?' on':'');
+    d.style.setProperty('--nc',nd.color);
+    d.innerHTML=`
+      <div class="nch" onclick="selNode('${nd.id}')">
+        <div><div class="ncn">${nd.id}</div><div class="nci">${nd.shortId}… · :${nd.addr.split(":")[1]}</div></div>
+        <div class="ncp">●</div>
+      </div>
+      <div class="ncb">
+        <div class="ncg">
+          <div class="ncs"><div class="ncsl">Keys</div><div class="ncsv">${nd.keys}</div></div>
+          <div class="ncs"><div class="ncsl">Status</div><div class="ncsv" style="color:var(--grn);font-size:10px">ONLINE</div></div>
+          <div class="ncs"><div class="ncsl">Pred</div><div class="ncsv" style="font-size:10px">${nd.pred && nd.pred!='NONE' ? 'NODE'+(nd.pred.split(':')[1]-8000) : '—'}</div></div>
+          <div class="ncs"><div class="ncsl">Succ</div><div class="ncsv" style="font-size:10px">${nd.succ && nd.succ!='NONE' ? 'NODE'+(nd.succ.split(':')[1]-8000) : '—'}</div></div>
+        </div>
+        <div class="ncact">
+          <button class="ncbtn" onclick="showNodeKeys('${nd.id}')">KEYS</button>
+          <button class="ncbtn" style="color:var(--red); border-color:var(--red)55" onclick="departNode('${nd.addr}')">DEPART</button>
+        </div>
+      </div>`;
+    el.appendChild(d);
+  });
+}
+
+function selNode(id){sel=sel===id?null:id;renderNodes();}
+
+async function showNodeKeys(id){
+  const r=await api('/queryall'); if(!r.ok) return;
+  const nd=nodes.find(n=>n.id===id);
+  const kv=nd?r.data[nd.addr]:{};
+  const entries=Object.entries(kv||{});
+  if(entries.length===0){showRes('['+id+'] — 0 keys','ok');return}
+  showRes('['+id+'] — '+entries.length+' keys:\n'+entries.map(([k,v])=>'  '+k+': '+v).join('\n'),'ok');
+}
+
+function switchTab(t){
+  ['insert','query','delete','overlay','throughput'].forEach((x,i)=>{
+    document.querySelectorAll('.tab')[i].classList.toggle('on',x===t);
+    document.getElementById('f-'+x).classList.toggle('on',x===t);
+  });
+  hideRes();
+}
+
+function showRes(txt,type){
+  const el=document.getElementById('res');
+  el.textContent=txt; el.className='res on'+(type?' '+type:'');
+}
+function hideRes(){document.getElementById('res').className='res'}
+
+function addLog(op,msg,nodeId){
+  const p=document.getElementById('logPanel');
+  const now=new Date();
+  const t=[now.getHours(),now.getMinutes(),now.getSeconds()].map(x=>String(x).padStart(2,'0')).join(':');
+  const e=document.createElement('div'); e.className='le';
+  e.innerHTML=`<span class="lt">${t}</span><span class="lo ${op}">${op}</span>${msg}${nodeId?`<div class="lnode">→ ${nodeId}</div>`:''}`;
+  p.insertBefore(e,p.firstChild);
+  while(p.children.length>60) p.removeChild(p.lastChild);
+}
+
+function clearLog(){document.getElementById('logPanel').innerHTML=''}
+function updStats(){document.getElementById('sO').textContent=ops}
+function enc(s){return encodeURIComponent(s)}
+
+async function runThroughputTest() {
+  if(!isLive){showRes('ERROR: Κάνε PING πρώτα','err');return}
+  const btn = document.getElementById('tBtn');
+  btn.textContent = '⏳ RUNNING... (παρακαλώ περίμενε ~15s)';
+  btn.disabled = true;
+  addLog('SYS','Throughput test ξεκίνησε...');
+  showRes('⏳ Εκτελείται το throughput_test.py...\n\nINSERT → sleep 3s → QUERY\nΠαρακαλώ περίμενε.','');
+  const r = await api('/run-throughput-test');
+  btn.textContent = '▶ RUN THROUGHPUT TEST';
+  btn.disabled = false;
+  if(r.ok && r.data?.output){
+    showRes(r.data.output, r.data.status==='ok' ? 'ok' : 'err');
+    addLog('SYS','Throughput test ολοκληρώθηκε');
+  } else {
+    showRes('ERROR: Αποτυχία εκτέλεσης\n'+JSON.stringify(r.data),'err');
+    addLog('ERR','Throughput test απέτυχε');
+  }
+}
+
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&e.key==='Enter'){
+    const f=document.querySelector('.form.on');
+    if(f?.id==='f-insert') doInsert();
+    else if(f?.id==='f-query') doQuery();
+    else if(f?.id==='f-delete') doDelete();
+  }
+});
+
+window.addEventListener('resize',resize);
+resize(); draw();
+addLog('SYS','Κάνε κλικ στο ⬡ PING για σύνδεση');
+</script>
+</body>
+</html

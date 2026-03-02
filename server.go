@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"net"
+	"os"
 	"strings"
 	"time"
 )
@@ -92,9 +93,11 @@ func (n *Node) HandleConnection(conn net.Conn) {
 			}
 		case "SET_SUCCESSOR": //χερισμος depart
 			info := parseNodeInfo(args[1])
-			n.mu.Lock()
-			n.Successor = info
-			n.mu.Unlock()
+			if info != nil {
+				n.mu.Lock()
+				n.Successor = info
+				n.mu.Unlock()
+			}
 			response = "OK"
 
 		case "SET_PREDECESSOR": //χειρισμος depart
@@ -190,7 +193,10 @@ func (n *Node) HandleConnection(conn net.Conn) {
 				var remaining int
 				fmt.Sscanf(args[1], "%d", &remaining)
 				key := strings.Join(args[2:], " ")
-				if remaining <= 1 || n.Successor.Address == n.Address {
+				n.mu.RLock()
+				mySuccAddr := n.Successor.Address
+				n.mu.RUnlock()
+				if remaining <= 1 || mySuccAddr == n.Address {
 					// Είμαι ο tail, επιστρέφω τοπικά
 					val, exists := n.StoreGet(key)
 					if exists {
@@ -210,6 +216,7 @@ func (n *Node) HandleConnection(conn net.Conn) {
 					}
 				}
 			}
+
 		case "CHAIN_DELETE":
 			if len(args) >= 3 {
 				var remaining int
@@ -259,7 +266,10 @@ func (n *Node) HandleConnection(conn net.Conn) {
 			if len(args) >= 2 {
 				key := strings.Join(args[1:], " ")
 				if n.Consistency == "linear" && n.K > 1 {
-					resp, err := n.call(n.Successor.Address, fmt.Sprintf("CHAIN_READ %d %s", n.K-1, key))
+					n.mu.RLock()
+					succAddr := n.Successor.Address
+					n.mu.RUnlock()
+					resp, err := n.call(succAddr, fmt.Sprintf("CHAIN_READ %d %s", n.K-1, key))
 					if err != nil {
 						response = "NOT_FOUND"
 					} else {
@@ -274,6 +284,7 @@ func (n *Node) HandleConnection(conn net.Conn) {
 					}
 				}
 			}
+
 		case "QUERY_ALL":
 			data := n.StoreGetAll()
 			var pairs []string
@@ -366,6 +377,28 @@ func (n *Node) HandleConnection(conn net.Conn) {
 					response = res
 				}
 			}
+		case "CLIENT_DELETE":
+			if len(args) >= 2 {
+				key := strings.Join(args[1:], " ")
+				addr, err := n.Delete(key)
+				if err != nil {
+					response = "NOT_FOUND"
+				} else {
+					response = "OK " + addr
+				}
+			}
+
+		case "SYSTEM_INFO": // Επιστρέφει το K και το Consistency στο UI
+			response = fmt.Sprintf("%d|%s", n.K, n.Consistency)
+
+		case "CLIENT_DEPART": // Εντολή για να αποχωρήσει ομαλά ένας κόμβος
+			n.Depart()
+			fmt.Fprintln(conn, "OK")
+			conn.Close()
+			time.Sleep(200 * time.Millisecond)
+			os.Exit(0)
+			return
+
 		default:
 			response = "UNKNOWN_COMMAND"
 

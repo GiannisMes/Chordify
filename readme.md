@@ -43,6 +43,23 @@ go run . -port 8001 -bootstrap 127.0.0.1:8000 -k 3 -consistency eventual -intera
 $env:K_VAL="3"; $env:CONSISTENCY="linear"; docker-compose up --build
 `
 
+### 3. Web UI (Proxy Dashboard)
+Μετά την εκκίνηση του Docker, ξεκινήστε τον Proxy server για πρόσβαση στο γραφικό περιβάλλον:
+`powershell
+cd proxy
+go run .
+`
+Ανοίξτε τον browser στη διεύθυνση **http://localhost:8080**.
+
+| Στοιχείο UI | Λειτουργία |
+|---|---|
+| ⬡ PING | Σύνδεση & ανίχνευση του δικτύου |
+| ↻ REFRESH | Ανανέωση DHT ring & στατιστικών |
+| INSERT / QUERY / DELETE | Αλληλεπίδραση με το DHT |
+| OVERLAY | Εμφάνιση τοπολογίας δακτυλίου |
+| THROUGHPUT | Εκτέλεση `throughput_test.py` απευθείας από το UI |
+| DEPART (σε κάθε node) | Graceful αποχώρηση κόμβου |
+
 ## Εντολές CLI
 - `info`                    — Πληροφορίες κόμβου (address, ID, successor, predecessor)
 - `insert <key> <value>`    — Εισαγωγή δεδομένων (routing στον υπεύθυνο κόμβο)
@@ -127,5 +144,3 @@ $env:K_VAL="3"; $env:CONSISTENCY="linear"; docker-compose up --build
 
 3. **Το Σημείο Κορεσμού  ($K=5$):** Στο  σενάριο του $K=5$, παρατηρήθηκε ότι το Linear (383.96 writes/sec) διατήρησε καλύτερη απόδοση από το Eventual (359.67 writes/sec). Επειδή το πείραμα διεξήχθη σε τοπικό περιβάλλον (Localhost), το network latency ήταν πρακτικά μηδενικό, επιτρέποντας στο Linearizability να εκτελεστεί σειριακά με εξαιρετική ταχύτητα. Αντίθετα, στο Eventual Consistency, η ταυτόχρονη εκκίνηση χιλιάδων background goroutines (λόγω των παράλληλων ταυτόχρονων requests σε 10 κόμβους) οδήγησε τον επεξεργαστή σε σημείο κορεσμού (CPU Saturation / Thrashing). Σε αυτή την περίπτωση, η σειριακή φύση του Linear λειτούργησε ως φυσικός ρυθμιστής φόρτου (backpressure), προστατεύοντας το σύστημα από την υπερφόρτωση.
 
-## Μελλοντικές Προσθήκες (To-Do)
-- Δημιουργία Γραφικού Περιβάλλοντος (Web UI) για την οπτικοποίηση του δακτυλίου και την εύκολη αλληλεπίδραση των χρηστών με τους κόμβους.

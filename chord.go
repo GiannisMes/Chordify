@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -31,7 +32,11 @@ func (n *Node) FindSuccessor(id *big.Int) (*NodeInfo, error) {
 		if err != nil {
 			return nil, err
 		}
-		return parseNodeInfo(resp), nil
+		result := parseNodeInfo(resp)
+		if result == nil {
+			return nil, fmt.Errorf("invalid FIND_SUCCESSOR response: %s", resp)
+		}
+		return result, nil
 	}
 	// 4. Εδώ γίνεται το "άλμα"!
 	// Προωθούμε την αναζήτηση στον κόμβο που βρήκαμε από το Finger Table.
@@ -41,7 +46,11 @@ func (n *Node) FindSuccessor(id *big.Int) (*NodeInfo, error) {
 	}
 
 	// Μετατρέπουμε την απάντηση ξανά σε NodeInfo
-	return parseNodeInfo(resp), nil
+	result := parseNodeInfo(resp)
+	if result == nil {
+		return nil, fmt.Errorf("invalid FIND_SUCCESSOR response: %s", resp)
+	}
+	return result, nil
 }
 
 // ClosestPrecedingNode: Ψάχνει στο Finger Table τον πιο κοντινό κόμβο πριν το id
@@ -66,7 +75,10 @@ func (n *Node) FixFingers() {
 	m := new(big.Int).Exp(big.NewInt(2), big.NewInt(160), nil)
 
 	for {
-		time.Sleep(500 * time.Millisecond) // Ανανεώνει μία θέση κάθε μισό δευτερόλεπτο
+		time.Sleep(500 * time.Millisecond)
+		if atomic.LoadInt32(&n.Departing) == 1 {
+			return
+		} // Ανανεώνει μία θέση κάθε μισό δευτερόλεπτο
 
 		// 1. Υπολογίζουμε το "άλμα" που πρέπει να κάνουμε: 2^next
 		offset := new(big.Int).Exp(big.NewInt(2), big.NewInt(int64(next)), nil)
@@ -113,6 +125,9 @@ func (n *Node) Stabilize() {
 
 	for {
 		time.Sleep(1 * time.Second)
+		if atomic.LoadInt32(&n.Departing) == 1 {
+			return
+		}
 
 		n.mu.RLock()
 		succ := n.Successor
@@ -126,7 +141,7 @@ func (n *Node) Stabilize() {
 		resp, err := n.call(succ.Address, "GET_PREDECESSOR") // ← succ.Address
 		if err == nil && resp != "NONE" && resp != "UNKNOWN_COMMAND" {
 			x := parseNodeInfo(resp)
-			if checkRange(x.ID, n.ID, succ.ID) { // ← succ.ID, δεν χρειάζεται 2ο RLock
+			if x != nil && checkRange(x.ID, n.ID, succ.ID) { // ← succ.ID, δεν χρειάζεται 2ο RLock
 				n.mu.Lock() // ← Lock γιατί γράφουμε
 				n.Successor = x
 				n.mu.Unlock()
