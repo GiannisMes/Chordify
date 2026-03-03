@@ -36,15 +36,12 @@ def worker(node_id, action_type, results_dict):
             continue
 
         if action_type == "INSERT":
-            parts = line.split(',') if ',' in line else line.split()
-            key = parts[0].replace(" ", "_")
-            value = parts[1] if len(parts) > 1 else "default_val"
-            send_command("127.0.0.1", port, f"CLIENT_INSERT {key} {value}")
+            key = line.strip().replace(" ", "_")
+            send_command("127.0.0.1", port, f"CLIENT_INSERT {key} default_val")
             req_count += 1
 
         elif action_type == "QUERY":
-            key = line.split(',')[0].strip() if ',' in line else line.split()[0].strip()
-            key = key.replace(" ", "_")
+            key = line.strip().replace(" ", "_")
             send_command("127.0.0.1", port, f"CLIENT_QUERY {key}")
             req_count += 1
 

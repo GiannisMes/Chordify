@@ -2,26 +2,45 @@
 
 Υλοποίηση κατανεμημένου συστήματος DHT βασισμένου στο πρωτόκολλο Chord με χρήση finger tables. Η εργασία υλοποιήθηκε στα πλαίσια του μαθήματος "Κατανεμημένα Συστήματα".
 
+## Επιλογή Γλώσσας — Go
+Η Go επιλέχθηκε λόγω της εγγενούς υποστήριξης για ταυτόχρονο προγραμματισμό μέσω goroutines, που ταιριάζουν φυσικά στο μοντέλο ενός κατανεμημένου συστήματος όπου κάθε κόμβος διαχειρίζεται πολλαπλές ταυτόχρονες συνδέσεις. Επιπλέον, η Go προσφέρει χαμηλό overhead για I/O-bound εργασίες (TCP connections), κάτι ιδιαίτερα χρήσιμο σε ένα σύστημα όπου κάθε λειτουργία απαιτεί επικοινωνία μεταξύ κόμβων μέσω δικτύου.
+
 ## Δομή Αρχείων
-- `main.go`    — Startup, διαχείριση παραμέτρων (-port, -bootstrap, -k, -consistency)
-- `node.go`    — Βασική δομή Node, NewNode, Join, Depart
-- `chord.go`   — Συναρτήσεις δρομολόγησης: FindSuccessor, ClosestPrecedingNode, Stabilize, FixFingers, Notify
-- `store.go`   — Διαχείριση τοπικών και κατανεμημένων δεδομένων, ReplicateEventual
-- `server.go`  — TCP Server, HandleConnection
-- `network.go` — Επικοινωνία δικτύου (call, parseNodeInfo)
-- `cli.go`     — Διεπαφή γραμμής εντολών (CLI interface)
-- `hash.go`    — Συνάρτηση κατακερματισμού SHA-1
-- `throughput_test.py`  — Python script για αυτόματη εκτέλεση ταυτόχρονων requests στα πειράματα
-### TCP Commands (server)
+- `main.go`              — Startup, ανάλυση παραμέτρων (`-port`, `-bootstrap`, `-k`, `-consistency`, `-interactive`)
+- `node.go`              — Δομή `Node`, `NewNode`, `Join`, `Depart`, `RedistributeMyReplicas`
+- `chord.go`             — Chord routing: `FindSuccessor`, `ClosestPrecedingNode`, `Stabilize`, `FixFingers`, `Notify`, `checkRange`
+- `store.go`             — `StorePut` (concat), `StorePutOverwrite`, `StoreGet`, `StoreDelete`, `StoreGetAll`, `Insert`, `Query`, `Delete`, `ReplicateEventual`
+- `server.go`            — TCP server (`StartServer`, `HandleConnection`), υλοποίηση όλων των TCP εντολών
+- `network.go`           — Επικοινωνία κόμβων: `call`, `parseNodeInfo`, `GetSuccessors`
+- `cli.go`               — Διαδραστική γραμμή εντολών (info, insert, query, delete, overlay, exit)
+- `hash.go`              — SHA-1 hashing (`hashString`)
+- `throughput_test.py`   — Python stress-test script: ταυτόχρονα requests σε 10 κόμβους, μέτρηση req/sec
+- `consistency_test.py`  — Python script για επαλήθευση stale reads (eventual vs linearizability)
+- `dockerfile`           — Image ενός κόμβου (Go build + runtime)
+- `docker-compose.yml`   — Ορχήστρωση 10 κόμβων με παραμέτρους K και CONSISTENCY μέσω env variables
+
+### TCP Commands (server.go)
 - `PING`, `ID`, `FIND_SUCCESSOR`, `GET_PREDECESSOR`, `GET_SUCCESSOR`
 - `NOTIFY`, `SET_SUCCESSOR`, `SET_PREDECESSOR`
 - `INSERT`, `DELETE`, `QUERY`, `QUERY_ALL`
 - `REPLICA_INSERT`, `REPLICA_DELETE`
 - `REBALANCE_REPLICAS`
-- `CHAIN_WRITE`, `CHAIN_READ`
+- `CHAIN_WRITE`, `CHAIN_READ`, `CHAIN_DELETE`
 - `TRANSFER`, `TRANSFER_KEYS`
-- `CLIENT_INSERT`, `CLIENT_QUERY` — για χρήση από scripts (σωστό DHT routing)
-- `OVERLAY_INFO`
+- `CLIENT_INSERT`, `CLIENT_QUERY`, `CLIENT_DELETE` — για χρήση από scripts (σωστό DHT routing)
+- `CLIENT_DEPART` — graceful αποχώρηση κόμβου
+- `OVERLAY_INFO`, `SYSTEM_INFO`
+
+### Proxy HTTP Endpoints (proxy/main.go)
+- `GET /ping` — PING στον bootstrap, επιβεβαίωση ότι το δίκτυο είναι online
+- `GET /insert?key=&value=` — CLIENT_INSERT με Chord routing
+- `GET /query?key=` — CLIENT_QUERY με Chord routing
+- `GET /delete?key=` — CLIENT_DELETE με Chord routing
+- `GET /overlay` — διατρέχει τον δακτύλιο (ID + OVERLAY_INFO ανά κόμβο)
+- `GET /queryall` — QUERY_ALL από κάθε κόμβο του δακτυλίου
+- `GET /sysinfo` — SYSTEM_INFO (K και consistency model)
+- `GET /depart?addr=` — CLIENT_DEPART σε συγκεκριμένο κόμβο
+- `GET /run-throughput-test` — εκτελεί το `throughput_test.py` και επιστρέφει output
 
 ## Εκκίνηση και Εκτέλεση
 
@@ -142,5 +161,5 @@ go run .
 
 2. **Eventual vs Linearizability ($K=3$):** Σε λογικό φόρτο ($K=3$), το Eventual Consistency (433.82 writes/sec) υπερτερεί έναντι του Linear (413.74 writes/sec). Αυτό οφείλεται στην ικανότητα του Eventual να επιστρέφει το αποτέλεσμα στον client άμεσα, αναθέτοντας την ενημέρωση των αντιγράφων σε background goroutines, εν αντιθέσει με το Linear που αναμένει την ολοκλήρωση της chain replication αλυσίδας.
 
-3. **Το Σημείο Κορεσμού  ($K=5$):** Στο  σενάριο του $K=5$, παρατηρήθηκε ότι το Linear (383.96 writes/sec) διατήρησε καλύτερη απόδοση από το Eventual (359.67 writes/sec). Επειδή το πείραμα διεξήχθη σε τοπικό περιβάλλον (Localhost), το network latency ήταν πρακτικά μηδενικό, επιτρέποντας στο Linearizability να εκτελεστεί σειριακά με εξαιρετική ταχύτητα. Αντίθετα, στο Eventual Consistency, η ταυτόχρονη εκκίνηση χιλιάδων background goroutines (λόγω των παράλληλων ταυτόχρονων requests σε 10 κόμβους) οδήγησε τον επεξεργαστή σε σημείο κορεσμού (CPU Saturation / Thrashing). Σε αυτή την περίπτωση, η σειριακή φύση του Linear λειτούργησε ως φυσικός ρυθμιστής φόρτου (backpressure), προστατεύοντας το σύστημα από την υπερφόρτωση.
+3. **Το Σημείο Κορεσμού  ($K=5$):** Στο  σενάριο του $K=5$, παρατηρήθηκε ότι το Linear (383.96 writes/sec) διατήρησε καλύτερη απόδοση από το Eventual (359.67 writes/sec). Επειδή το πείραμα διεξήχθη σε τοπικό περιβάλλον (Localhost), το network latency ήταν πρακτικά μηδενικό, επιτρέποντας στο Linearizability να εκτελεστεί σειριακά με εξαιρετική ταχύτητα. Αντίθετα, στο Eventual Consistency, κάθε INSERT δημιουργεί K-1=4 background goroutines για ασύγχρονη αντιγραφή. Καθώς αυτές δεν αναμένονται πριν επιστραφεί το αποτέλεσμα στον client, υπό υψηλό φόρτο συσσωρεύονται ταυτόχρονα στον επεξεργαστή, οδηγώντας σε αυξημένη κατανάλωση πόρων (goroutine overhead) που επηρεάζει αρνητικά το throughput. Σε αυτή την περίπτωση, η σειριακή φύση του Linear λειτούργησε ως φυσικός ρυθμιστής φόρτου (backpressure), προστατεύοντας το σύστημα από την υπερφόρτωση.
 

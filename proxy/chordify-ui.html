@@ -107,8 +107,38 @@ h1 span{color:var(--acc)}
 
 <header>
   <div class="logo">
-    <div class="logo-ring"></div>
-    <h1>CHORD<span>IFY</span></h1>
+    <svg width="180" height="48" viewBox="0 0 260 90" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+          <feMerge>
+            <feMergeNode in="coloredBlur"/>
+            <feMergeNode in="SourceGraphic"/>
+          </feMerge>
+        </filter>
+        <clipPath id="ellClip">
+          <ellipse cx="130" cy="45" rx="118" ry="36"/>
+        </clipPath>
+        <clipPath id="leftClip">
+          <rect x="0" y="0" width="130" height="90"/>
+        </clipPath>
+        <clipPath id="rightClip">
+          <rect x="130" y="0" width="130" height="90"/>
+        </clipPath>
+      </defs>
+      <!-- Αριστερό μισό φόντο -->
+      <rect x="10" y="7" width="120" height="76" fill="#0f1822" clip-path="url(#ellClip)"/>
+      <!-- Δεξί μισό φόντο -->
+      <rect x="130" y="7" width="120" height="76" fill="#060a10" clip-path="url(#ellClip)"/>
+      <!-- Border με glow -->
+      <ellipse cx="130" cy="45" rx="118" ry="36" fill="none" stroke="#00e5ff" stroke-width="2.5" filter="url(#glow)"/>
+      <!-- Κάθετη γραμμή -->
+      <line x1="130" y1="9" x2="130" y2="81" stroke="#00e5ff" stroke-width="1.5" opacity="0.6" clip-path="url(#ellClip)"/>
+      <!-- "chordify" γκρι — αριστερό μισό -->
+      <text x="130" y="50" font-family="Impact, 'Arial Black', sans-serif" font-size="38" font-weight="900" font-style="italic" text-anchor="middle" dominant-baseline="middle" letter-spacing="1" fill="#c0d4e8" clip-path="url(#leftClip)">chordify</text>
+      <!-- "chordify" cyan — δεξί μισό -->
+      <text x="130" y="50" font-family="Impact, 'Arial Black', sans-serif" font-size="38" font-weight="900" font-style="italic" text-anchor="middle" dominant-baseline="middle" letter-spacing="1" fill="#00e5ff" clip-path="url(#rightClip)">chordify</text>
+    </svg>
   </div>
   <div class="hright">
     
@@ -149,6 +179,7 @@ h1 span{color:var(--acc)}
         <button class="tab" onclick="switchTab('query')">QUERY</button>
         <button class="tab" onclick="switchTab('delete')">DELETE</button>
         <button class="tab" onclick="switchTab('overlay')">OVERLAY</button>
+        <button class="tab" onclick="switchTab('keys')">KEYS</button>
         <button class="tab" onclick="switchTab('throughput')">THROUGHPUT</button>
       </div>
       <div class="form on" id="f-insert">
@@ -166,6 +197,10 @@ h1 span{color:var(--acc)}
       </div>
       <div class="form" id="f-overlay">
         <button class="xbtn" style="width:100%" onclick="refreshOverlay()">↻ REFRESH OVERLAY</button>
+      </div>
+      <div class="form" id="f-keys">
+        <div class="fg"><label class="fl">Node (address ή NODE0)</label><input class="fi" id="kAddr" placeholder="π.χ. 127.0.0.1:8001 ή NODE1"></div>
+        <button class="xbtn" onclick="doNodeKeys()">→ KEYS</button>
       </div>
       <div class="form" id="f-throughput">
         <button class="xbtn" style="width:100%" id="tBtn" onclick="runThroughputTest()">▶ RUN THROUGHPUT TEST</button>
@@ -460,12 +495,31 @@ async function showNodeKeys(id){
   const nd=nodes.find(n=>n.id===id);
   const kv=nd?r.data[nd.addr]:{};
   const entries=Object.entries(kv||{});
+  switchTab('keys');
+  if(nd) document.getElementById('kAddr').value = nd.addr;
   if(entries.length===0){showRes('['+id+'] — 0 keys','ok');return}
   showRes('['+id+'] — '+entries.length+' keys:\n'+entries.map(([k,v])=>'  '+k+': '+v).join('\n'),'ok');
 }
 
+async function doNodeKeys(){
+  const raw = document.getElementById('kAddr').value.trim();
+  if(!raw){showRes('ERROR: address απαιτείται','err');return}
+  if(!isLive){showRes('ERROR: Κάνε PING πρώτα','err');return}
+  let addr = raw;
+  if(raw.toUpperCase().startsWith('NODE')){
+    const num = parseInt(raw.substring(4));
+    addr = '127.0.0.1:'+(8000+num);
+  }
+  const r=await api('/queryall'); if(!r.ok) return;
+  const kv = r.data[addr] || {};
+  const entries = Object.entries(kv);
+  const label = 'NODE'+(addr.split(':')[1]-8000);
+  if(entries.length===0){showRes('['+label+'] — 0 keys','ok');return}
+  showRes('['+label+'] — '+entries.length+' keys:\n'+entries.map(([k,v])=>'  '+k+': '+v).join('\n'),'ok');
+}
+
 function switchTab(t){
-  ['insert','query','delete','overlay','throughput'].forEach((x,i)=>{
+  ['insert','query','delete','overlay','keys','throughput'].forEach((x,i)=>{
     document.querySelectorAll('.tab')[i].classList.toggle('on',x===t);
     document.getElementById('f-'+x).classList.toggle('on',x===t);
   });
@@ -517,6 +571,14 @@ document.addEventListener('keydown',e=>{
     if(f?.id==='f-insert') doInsert();
     else if(f?.id==='f-query') doQuery();
     else if(f?.id==='f-delete') doDelete();
+  }
+});
+
+document.addEventListener('click', e => {
+  const res = document.getElementById('res');
+  const ops = document.querySelector('.ops');
+  if (!ops.contains(e.target) && res.classList.contains('on')) {
+    hideRes();
   }
 });
 

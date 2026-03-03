@@ -173,7 +173,7 @@ func (n *Node) Stabilize() {
 				}
 
 				// Αν άλλαξε το K-set (π.χ. μπήκε/βγήκε κόμβος) και δεν είναι η πρώτη φορά που τρέχει (len > 0)
-				if changed && len(lastKSuccessors) > 0 {
+				if changed {
 					go n.RedistributeMyReplicas() // Ανακατανομή των replicas μας!
 				}
 
