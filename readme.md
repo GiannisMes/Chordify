@@ -47,27 +47,27 @@
 Το σύστημα υποστηρίζει τοπική εκτέλεση μέσω Go ή προσομοίωση δικτύου 10 κόμβων μέσω Docker.
 
 ### 1. Τοπική Εκτέλεση (Μεμονωμένοι Κόμβοι)
-`bash
+```bash
 # Bootstrap κόμβος (χωρίς replication)
 go run . -port 8000 -interactive
 
 # Νέος κόμβος με replication k=3 και eventual consistency
 go run . -port 8001 -bootstrap 127.0.0.1:8000 -k 3 -consistency eventual -interactive
-`
+```
 
 ### 2. Αυτοματοποιημένη Εκτέλεση 10 Κόμβων (Docker Compose)
 Για την εκτέλεση των πειραμάτων, το σύστημα στήνεται γρήγορα μέσω Docker:
-`powershell
+```powershell
 # Παράδειγμα εκκίνησης με K=3 και Linearizability
 $env:K_VAL="3"; $env:CONSISTENCY="linear"; docker-compose up --build
-`
+```
 
 ### 3. Web UI (Proxy Dashboard)
 Μετά την εκκίνηση του Docker, ξεκινήστε τον Proxy server για πρόσβαση στο γραφικό περιβάλλον:
-`powershell
+```powershell
 cd proxy
 go run .
-`
+```
 Ανοίξτε τον browser στη διεύθυνση **http://localhost:8080**.
 
 | Στοιχείο UI | Λειτουργία |
@@ -76,6 +76,7 @@ go run .
 | ↻ REFRESH | Ανανέωση DHT ring & στατιστικών |
 | INSERT / QUERY / DELETE | Αλληλεπίδραση με το DHT |
 | OVERLAY | Εμφάνιση τοπολογίας δακτυλίου |
+| KEYS | Εμφάνιση των κλειδιών ενός κόμβου (με address ή NODE0/NODE1 κλπ) |
 | THROUGHPUT | Εκτέλεση `throughput_test.py` απευθείας από το UI |
 | DEPART (σε κάθε node) | Graceful αποχώρηση κόμβου |
 
