@@ -1,25 +1,30 @@
-# Chordify - Distributed Hash Table (Τελική Αναφορά)
+# Chordify — Distributed Hash Table in Go
 
-Υλοποίηση κατανεμημένου συστήματος DHT βασισμένου στο πρωτόκολλο Chord με χρήση finger tables. Η εργασία υλοποιήθηκε στα πλαίσια του μαθήματος "Κατανεμημένα Συστήματα".
+A fully functional implementation of the **Chord DHT protocol** with finger tables, replication, and two consistency models: **Eventual Consistency** and **Linearizability** (Chain Replication).
 
-## Επιλογή Γλώσσας — Go
-Η Go επιλέχθηκε λόγω της εγγενούς υποστήριξης για ταυτόχρονο προγραμματισμό μέσω goroutines, που ταιριάζουν φυσικά στο μοντέλο ενός κατανεμημένου συστήματος όπου κάθε κόμβος διαχειρίζεται πολλαπλές ταυτόχρονες συνδέσεις. Επιπλέον, η Go προσφέρει χαμηλό overhead για I/O-bound εργασίες (TCP connections), κάτι ιδιαίτερα χρήσιμο σε ένα σύστημα όπου κάθε λειτουργία απαιτεί επικοινωνία μεταξύ κόμβων μέσω δικτύου.
+## Why Go
 
-## Δομή Αρχείων
-- `main.go`              — Startup, ανάλυση παραμέτρων (`-port`, `-bootstrap`, `-k`, `-consistency`, `-interactive`)
-- `node.go`              — Δομή `Node`, `NewNode`, `Join`, `Depart`, `RedistributeMyReplicas`
-- `chord.go`             — Chord routing: `FindSuccessor`, `ClosestPrecedingNode`, `Stabilize`, `FixFingers`, `Notify`, `checkRange`
-- `store.go`             — `StorePut` (concat), `StorePutOverwrite`, `StoreGet`, `StoreDelete`, `StoreGetAll`, `Insert`, `Query`, `Delete`, `ReplicateEventual`
-- `server.go`            — TCP server (`StartServer`, `HandleConnection`), υλοποίηση όλων των TCP εντολών
-- `network.go`           — Επικοινωνία κόμβων: `call`, `parseNodeInfo`, `GetSuccessors`
-- `cli.go`               — Διαδραστική γραμμή εντολών (info, insert, query, delete, overlay, exit)
-- `hash.go`              — SHA-1 hashing (`hashString`)
-- `throughput_test.py`   — Python stress-test script: ταυτόχρονα requests σε 10 κόμβους, μέτρηση req/sec
-- `consistency_test.py`  — Python script για επαλήθευση stale reads (eventual vs linearizability)
-- `dockerfile`           — Image ενός κόμβου (Go build + runtime)
-- `docker-compose.yml`   — Ορχήστρωση 10 κόμβων με παραμέτρους K και CONSISTENCY μέσω env variables
+Go's native concurrency primitives (goroutines, channels) map naturally to a distributed node model where each node handles multiple simultaneous TCP connections. Its low overhead for I/O-bound operations makes it well-suited for a system where every operation involves inter-node network communication.
 
-### TCP Commands (server.go)
+## File Structure
+
+| File | Description |
+|---|---|
+| `main.go` | Entry point — flag parsing (`-port`, `-bootstrap`, `-k`, `-consistency`, `-interactive`) |
+| `node.go` | `Node` struct, `NewNode`, `Join`, `Depart`, `RedistributeMyReplicas` |
+| `chord.go` | Chord routing: `FindSuccessor`, `ClosestPrecedingNode`, `Stabilize`, `FixFingers`, `Notify` |
+| `store.go` | `StorePut`, `StoreGet`, `StoreDelete`, `Insert`, `Query`, `Delete`, `ReplicateEventual` |
+| `server.go` | TCP server (`StartServer`, `HandleConnection`) and all TCP command handlers |
+| `network.go` | Inter-node communication: `call`, `parseNodeInfo`, `GetSuccessors` |
+| `cli.go` | Interactive CLI: info, insert, query, delete, overlay, exit |
+| `hash.go` | SHA-1 hashing (`hashString`) |
+| `throughput_test.py` | Concurrent stress-test across 10 nodes — measures requests/sec |
+| `consistency_test.py` | Validates stale reads under eventual vs. linearizable consistency |
+| `dockerfile` | Single-node image (Go build + minimal runtime) |
+| `docker-compose.yml` | Orchestrates a 10-node cluster via env vars (`K_VAL`, `CONSISTENCY`) |
+
+### TCP Protocol Commands (`server.go`)
+
 - `PING`, `ID`, `FIND_SUCCESSOR`, `GET_PREDECESSOR`, `GET_SUCCESSOR`
 - `NOTIFY`, `SET_SUCCESSOR`, `SET_PREDECESSOR`
 - `INSERT`, `DELETE`, `QUERY`, `QUERY_ALL`
@@ -27,140 +32,140 @@
 - `REBALANCE_REPLICAS`
 - `CHAIN_WRITE`, `CHAIN_READ`, `CHAIN_DELETE`
 - `TRANSFER`, `TRANSFER_KEYS`
-- `CLIENT_INSERT`, `CLIENT_QUERY`, `CLIENT_DELETE` — για χρήση από scripts (σωστό DHT routing)
-- `CLIENT_DEPART` — graceful αποχώρηση κόμβου
+- `CLIENT_INSERT`, `CLIENT_QUERY`, `CLIENT_DELETE` — DHT-routed client operations
+- `CLIENT_DEPART` — graceful node departure
 - `OVERLAY_INFO`, `SYSTEM_INFO`
 
-### Proxy HTTP Endpoints (proxy/main.go)
-- `GET /ping` — PING στον bootstrap, επιβεβαίωση ότι το δίκτυο είναι online
-- `GET /insert?key=&value=` — CLIENT_INSERT με Chord routing
-- `GET /query?key=` — CLIENT_QUERY με Chord routing
-- `GET /delete?key=` — CLIENT_DELETE με Chord routing
-- `GET /overlay` — διατρέχει τον δακτύλιο (ID + OVERLAY_INFO ανά κόμβο)
-- `GET /queryall` — QUERY_ALL από κάθε κόμβο του δακτυλίου
-- `GET /sysinfo` — SYSTEM_INFO (K και consistency model)
-- `GET /depart?addr=` — CLIENT_DEPART σε συγκεκριμένο κόμβο
-- `GET /run-throughput-test` — εκτελεί το `throughput_test.py` και επιστρέφει output
+### Proxy HTTP API (`proxy/main.go`)
 
-## Εκκίνηση και Εκτέλεση
+| Endpoint | Description |
+|---|---|
+| `GET /ping` | PING the bootstrap node |
+| `GET /insert?key=&value=` | CLIENT_INSERT with Chord routing |
+| `GET /query?key=` | CLIENT_QUERY with Chord routing |
+| `GET /delete?key=` | CLIENT_DELETE with Chord routing |
+| `GET /overlay` | Traverse the ring and return all node IDs |
+| `GET /queryall` | QUERY_ALL from every node in the ring |
+| `GET /sysinfo` | Returns K and active consistency model |
+| `GET /depart?addr=` | Graceful node departure |
+| `GET /run-throughput-test` | Execute `throughput_test.py` and stream output |
 
-Το σύστημα υποστηρίζει τοπική εκτέλεση μέσω Go ή προσομοίωση δικτύου 10 κόμβων μέσω Docker.
+## Getting Started
 
-### 1. Τοπική Εκτέλεση (Μεμονωμένοι Κόμβοι)
+### 1. Local (single nodes)
+
 ```bash
-# Bootstrap κόμβος (χωρίς replication)
+# Bootstrap node (no replication)
 go run . -port 8000 -interactive
 
-# Νέος κόμβος με replication k=3 και eventual consistency
+# Join with replication factor k=3 and eventual consistency
 go run . -port 8001 -bootstrap 127.0.0.1:8000 -k 3 -consistency eventual -interactive
 ```
 
-### 2. Αυτοματοποιημένη Εκτέλεση 10 Κόμβων (Docker Compose)
-Για την εκτέλεση των πειραμάτων, το σύστημα στήνεται γρήγορα μέσω Docker:
+### 2. Full 10-node cluster (Docker Compose)
+
 ```powershell
-# Παράδειγμα εκκίνησης με K=3 και Linearizability
+# Example: K=3, Linearizability
 $env:K_VAL="3"; $env:CONSISTENCY="linear"; docker-compose up --build
 ```
 
 ### 3. Web UI (Proxy Dashboard)
-Μετά την εκκίνηση του Docker, ξεκινήστε τον Proxy server για πρόσβαση στο γραφικό περιβάλλον:
+
 ```powershell
 cd proxy
 go run .
 ```
-Ανοίξτε τον browser στη διεύθυνση **http://localhost:8080**.
 
-| Στοιχείο UI | Λειτουργία |
+Open **http://localhost:8080** in your browser.
+
+| UI Element | Action |
 |---|---|
-| ⬡ PING | Σύνδεση & ανίχνευση του δικτύου |
-| ↻ REFRESH | Ανανέωση DHT ring & στατιστικών |
-| INSERT / QUERY / DELETE | Αλληλεπίδραση με το DHT |
-| OVERLAY | Εμφάνιση τοπολογίας δακτυλίου |
-| KEYS | Εμφάνιση των κλειδιών ενός κόμβου (με address ή NODE0/NODE1 κλπ) |
-| THROUGHPUT | Εκτέλεση `throughput_test.py` απευθείας από το UI |
-| DEPART (σε κάθε node) | Graceful αποχώρηση κόμβου |
+| PING | Connect and detect the network |
+| REFRESH | Update the DHT ring and stats |
+| INSERT / QUERY / DELETE | Interact with the DHT |
+| OVERLAY | Visualize the ring topology |
+| KEYS | View all keys on a node (by address or NODE0/NODE1…) |
+| THROUGHPUT | Run `throughput_test.py` directly from the UI |
+| DEPART | Graceful node removal |
 
-## Εντολές CLI
-- `info`                    — Πληροφορίες κόμβου (address, ID, successor, predecessor)
-- `insert <key> <value>`    — Εισαγωγή δεδομένων (routing στον υπεύθυνο κόμβο)
-- `query <key>`             — Αναζήτηση key
-- `query *`                 — Εμφάνιση όλων των δεδομένων ανά κόμβο
-- `delete <key>`            — Διαγραφή key
-- `overlay`                 — Εμφάνιση του δακτυλίου (predecessor/successor κάθε κόμβου)
-- `exit`                    — Graceful αποχώρηση κόμβου
+## CLI Commands
 
-## Υλοποιημένα Χαρακτηριστικά
+```
+info                   — Node info (address, ID, successor, predecessor)
+insert <key> <value>   — Insert key/value (DHT-routed to responsible node)
+query <key>            — Lookup a key
+query *                — Dump all keys across all nodes
+delete <key>           — Remove a key
+overlay                — Print the ring (predecessor/successor per node)
+exit                   — Graceful departure
+```
+
+## Features
 
 ### Core Chord
-- SHA-1 hashing για την παραγωγή node IDs και keys.
-- Finger tables (160 entries) με περιοδική συντήρηση μέσω της `FixFingers`.
-- Συναρτήσεις `Stabilize` και `Notify` για την αυτόματη συντήρηση του δακτυλίου.
-- `FindSuccessor` με δρομολόγηση `O(log N)` μέσω finger tables.
-- Ομαλή εισαγωγή (`Join`) και αποχώρηση (`Depart`) κόμβων με αυτόματη μεταφορά κλειδιών (`TRANSFER_KEYS`).
+- SHA-1 hashing for node IDs and keys
+- 160-entry finger tables with periodic maintenance via `FixFingers`
+- `Stabilize` and `Notify` for automatic ring maintenance
+- `O(log N)` routing via `FindSuccessor`
+- Smooth node join (`Join`) and departure (`Depart`) with automatic key transfer (`TRANSFER_KEYS`)
 
-### Διαχείριση Δυναμικού Δικτύου (Node Join & Graceful Depart)
-Η δυσκολία σε ένα σύστημα με replication είναι η διατήρηση των αντιγράφων όταν αλλάζει η τοπολογία (Node Churn). Το σύστημα το αντιμετωπίζει πλήρως:
-- **Node Join:** Όταν ένας νέος κόμβος εισέρχεται στο δίκτυο, αναλαμβάνει τον ρόλο του primary για ένα συγκεκριμένο εύρος κλειδιών του successor του. Τα κλειδιά αυτά μεταφέρονται αυτόματα στον νέο κόμβο (`TRANSFER_KEYS`). Ταυτόχρονα, το σύστημα φροντίζει να ανανεώσει τα replicas ώστε τα μεταφερθέντα κλειδιά να διατηρήσουν το σωστό replication factor ($K$) στους νέους successors.
-- **Graceful Depart:** Κατά την ομαλή αποχώρηση ενός κόμβου, ο κόμβος δεν τερματίζει απλά τη λειτουργία του χάνοντας δεδομένα. Αντίθετα, μεταφέρει ενεργά όλα τα primary κλειδιά του στον successor του (`TRANSFER`). Επιπλέον, ειδοποιεί το δίκτυο να κάνει ανακατανομή (`REBALANCE_REPLICAS`), εξασφαλίζοντας ότι ο διάδοχος θα δημιουργήσει νέα αντίγραφα στον $k$-οστό successor, διατηρώντας το επίπεδο Fault Tolerance ανέπαφο.
+### Dynamic Membership (Join & Graceful Depart)
 
-### Replication - Eventual Consistency
-- Παράμετρος `-k` για τον καθορισμό του replication factor (default k=1).
-- Κάθε key αποθηκεύεται στον primary κόμβο και στους k-1 επόμενους successors.
-- `INSERT` → αποθήκευση στον primary + ασύγχρονη κλήση (`REPLICA_INSERT`) στους k-1 successors.
-- `QUERY` → επιλογή **τυχαίου** κόμβου από τους k υπεύθυνους (primary + replicas). Ενδέχεται να επιστρέψει stale data.
+Maintaining correct replication under node churn is the core challenge. This system handles it fully:
 
-### Replication - Linearizability (Chain Replication)
-- **Write path**: HEAD (primary) → replica1 → ... → TAIL (σειριακά και σύγχρονα).
-- **Read path**: Η ανάγνωση γίνεται πάντα από τον TAIL, εγγυώντας απόλυτα fresh τιμές.
-- `INSERT` → Ο primary αποθηκεύει και προωθεί το αίτημα μέσω `CHAIN_WRITE` στους successors.
-- `QUERY` → Το αίτημα προωθείται μέσω `CHAIN_READ` μέχρι τον tail, ο οποίος επιστρέφει την τελική τιμή.
+- **Node Join:** The joining node takes over as primary for a key range from its successor. Keys are transferred automatically, and replicas are redistributed to maintain the configured replication factor K across the new successor list.
+- **Graceful Depart:** On departure, a node actively transfers all its primary keys to its successor (`TRANSFER`), then triggers `REBALANCE_REPLICAS` so the successor rebuilds replicas at the K-th successor — keeping fault tolerance intact.
 
----
+### Eventual Consistency
+- Configurable replication factor via `-k` (default: 1)
+- Each key is stored on the primary node and K-1 successors
+- **Write:** Primary stores → async `REPLICA_INSERT` to K-1 successors
+- **Read:** Random node chosen from the K responsible nodes (may return stale data)
 
-###  Εκτέλεση Πειραμάτων
+### Linearizability (Chain Replication)
+- **Write path:** HEAD (primary) → replica₁ → … → TAIL (sequential, synchronous)
+- **Read path:** Always from the TAIL — guarantees fresh reads
+- **Write:** Primary stores and propagates via `CHAIN_WRITE`
+- **Read:** Forwarded via `CHAIN_READ` to the tail, which returns the authoritative value
 
-Το σύστημα συνοδεύεται από δύο σενάρια (scripts) δοκιμών, το καθένα βελτιστοποιημένο για διαφορετικό σκοπό:
+## Experiments
 
-#### 1. Έλεγχος Throughput (Επιδόσεις)
-Χρησιμοποιείται για τη μέτρηση της μέγιστης απόδοσης του συστήματος σε σταθερό περιβάλλον.
-* **Προετοιμασία:** Ξεκινήστε το δίκτυο με την εντολή: `$env:K_VAL="3"; $env:CONSISTENCY="eventual"; docker-compose up --build` (PowerShell) ή τις αντίστοιχες εντολές για το OS σας.
-* **Εκτέλεση:** Τρέξτε την εντολή: `python throughput_test.py`
-* **Λεπτομέρειες:** Το script συνδέεται ταυτόχρονα σε 10 containers (ports 8000-8009) και υπολογίζει τα συνολικά Requests ανά δευτερόλεπτο.
+### Throughput Test
 
-#### 2. Έλεγχος Consistency (Θεωρία & Ορθότητα)
-Χρησιμοποιείται για την επαλήθευση των μοντέλων συνέπειας (Linearizability vs Eventual Consistency).
-* **Προετοιμασία:** Βεβαιωθείτε ότι το Docker είναι απενεργοποιημένο (`docker-compose down`).
-* **Εκτέλεση:** `python consistency_test.py [πλήθος_κόμβων] [k] [mode]`
-    * Παράδειγμα: `python consistency_test.py 5 3 eventual`
-* **Λεπτομέρειες:** Το script διαχειρίζεται τοπικά τη λειτουργία των κόμβων. 
+```powershell
+$env:K_VAL="3"; $env:CONSISTENCY="eventual"; docker-compose up --build
+python throughput_test.py
+```
 
-> **Σημαντική Σημείωση για το Eventual Consistency:** > Λόγω της πολύ υψηλής ταχύτητας επικοινωνίας σε τοπικό επίπεδο (localhost), τα "stale reads" (περιπτώσεις όπου το Query επιστρέφει "Not Found" επειδή ο replica δεν έχει ενημερωθεί ακόμα) μπορεί να μην είναι εμφανή. Για να προσομοιώσετε ρεαλιστικές συνθήκες δικτυακής καθυστέρησης και να παρατηρήσετε το φαινόμενο, προτείνεται η προσθήκη μιας εντολής καθυστέρησης (π.χ. `time.Sleep(2 * time.Second)`) συγκεκριμένα στη συνάρτηση `ReplicateEventual` στο αρχείο `node.go`. Αυτό θα δώσει το απαραίτητο "παράθυρο" χρόνου στο script να εκτελέσει το Query πριν ολοκληρωθεί η αναπαραγωγή των δεδομένων.
+Runs concurrent requests across all 10 nodes and reports aggregate requests/sec.
 
-## Αποτελέσματα Πειραμάτων
+### Consistency Test
 
-### Μέρος 1: Ορθότητα Δεδομένων (Stale vs Fresh Reads)
-Σε πειράματα λειτουργικότητας, παρατηρήθηκαν οι εξής συμπεριφορές:
+```bash
+python consistency_test.py <num_nodes> <k> <mode>
 
-* **Eventual Consistency:** Το `QUERY` επιλέγει τυχαία έναν από τους k υπεύθυνους. Υπάρχει κίνδυνος **stale read** αν το ασύγχρονο replication δεν έχει προλάβει να ολοκληρωθεί.
-  * *Παράδειγμα:* Μετά από `INSERT Hey_Jude 1001`, ένα άμεσο `QUERY Hey_Jude` μπορεί να επιστρέψει `1001` (αν ρωτηθεί ο primary) ή `NOT_FOUND` (αν ρωτηθεί καθυστερημένο replica).
-* **Linearizability:** Κάθε `QUERY` διαβάζει υποχρεωτικά από τον tail. Ποτέ δεν εμφανίζεται stale read ή `NOT_FOUND` μετά από επιτυχές INSERT. Το μοντέλο εγγυάται ισχυρή συνέπεια με κόστος στο latency λόγω του chain traversal.
+# Example
+python consistency_test.py 5 3 eventual
+```
 
-### Μέρος 2: Μετρήσεις Απόδοσης (Throughput Analysis)
-Πραγματοποιήθηκε stress-test στο σύστημα με τη χρήση Python script που εκτελούσε ταυτόχρονα requests σε 10 κόμβους (βάσει της εκφώνησης). Οι μετρήσεις λήφθηκαν τοπικά μέσω Docker . Κάθε τιμή στον παρακάτω πίνακα αποτελεί τον μέσο όρο τριών ανεξάρτητων μετρήσεων.
+> **Note on stale reads with eventual consistency:** On localhost, network latency is near-zero, so stale reads may be hard to observe. To simulate realistic conditions, add a `time.Sleep(2 * time.Second)` inside `ReplicateEventual` in `node.go` — this creates a window where a QUERY can arrive before replication completes.
 
-| K (Replication) | Consistency Model | Μέσο Write Throughput (Inserts/sec) | Μέσο Read Throughput (Queries/sec) |
-| :---: | :---: | :---: | :---: |
-| **K = 1** | - | **491.98** | **480.15** |
+## Benchmark Results
+
+Each value below is the average of three independent runs on a local Docker setup (10 nodes).
+
+| K | Consistency | Avg Write Throughput (inserts/sec) | Avg Read Throughput (queries/sec) |
+|:---:|:---:|:---:|:---:|
+| **K = 1** | — | **491.98** | **480.15** |
 | **K = 3** | Eventual | 433.82 | 426.32 |
 | **K = 3** | Linear | 413.74 | 412.55 |
 | **K = 5** | Eventual | 359.67 | 378.14 |
 | **K = 5** | Linear | 383.96 | 379.35 |
 
-**Συμπεράσματα Πειράματος:**
+**Key observations:**
 
-1. **Το Κόστος του Replication (Replication Penalty):** Η μέγιστη απόδοση επιτυγχάνεται στο baseline ($K=1$) με ~490 req/sec, καθώς απουσιάζει το overhead της αντιγραφής. Όσο αυξάνεται το replication factor (σε $K=3$ και $K=5$), το throughput μειώνεται σταδιακά (~360-380 req/sec), αναδεικνύοντας το αναμενόμενο κόστος του Fault Tolerance.
+1. **Replication penalty:** Baseline (K=1) achieves ~490 req/sec with zero replication overhead. Throughput decreases gradually as K increases (~360–380 req/sec at K=5), reflecting the expected cost of fault tolerance.
 
-2. **Eventual vs Linearizability ($K=3$):** Σε λογικό φόρτο ($K=3$), το Eventual Consistency (433.82 writes/sec) υπερτερεί έναντι του Linear (413.74 writes/sec). Αυτό οφείλεται στην ικανότητα του Eventual να επιστρέφει το αποτέλεσμα στον client άμεσα, αναθέτοντας την ενημέρωση των αντιγράφων σε background goroutines, εν αντιθέσει με το Linear που αναμένει την ολοκλήρωση της chain replication αλυσίδας.
+2. **Eventual vs. Linear at K=3:** Eventual outperforms Linear (433 vs. 413 writes/sec) because it returns immediately to the client and offloads replication to background goroutines, while Linear must wait for the full chain to acknowledge.
 
-3. **Το Σημείο Κορεσμού  ($K=5$):** Στο  σενάριο του $K=5$, παρατηρήθηκε ότι το Linear (383.96 writes/sec) διατήρησε καλύτερη απόδοση από το Eventual (359.67 writes/sec). Επειδή το πείραμα διεξήχθη σε τοπικό περιβάλλον (Localhost), το network latency ήταν πρακτικά μηδενικό, επιτρέποντας στο Linearizability να εκτελεστεί σειριακά με εξαιρετική ταχύτητα. Αντίθετα, στο Eventual Consistency, κάθε INSERT δημιουργεί K-1=4 background goroutines για ασύγχρονη αντιγραφή. Καθώς αυτές δεν αναμένονται πριν επιστραφεί το αποτέλεσμα στον client, υπό υψηλό φόρτο συσσωρεύονται ταυτόχρονα στον επεξεργαστή, οδηγώντας σε αυξημένη κατανάλωση πόρων (goroutine overhead) που επηρεάζει αρνητικά το throughput. Σε αυτή την περίπτωση, η σειριακή φύση του Linear λειτούργησε ως φυσικός ρυθμιστής φόρτου (backpressure), προστατεύοντας το σύστημα από την υπερφόρτωση.
-
+3. **Saturation at K=5:** Linear slightly outperforms Eventual (383 vs. 359 writes/sec) at K=5. On localhost, synchronous chain writes are fast. Eventual consistency spawns K-1=4 background goroutines per INSERT; under high load these accumulate, increasing goroutine scheduling overhead. The sequential nature of chain replication acts as natural backpressure, protecting throughput at high replication factors.
